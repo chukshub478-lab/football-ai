@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+<meta charset="UTF-8">
+
+<meta
+name="viewport"
+content="width=device-width, initial-scale=1.0"
+>
+
+<title>Football AI Analyst</title>
+
+<link
+rel="stylesheet"
+href="style.css"
+>
+
+</head>
+
+<body>
+
+<header>
+
+<h1>Football AI Analyst</h1>
+
+<p>
+Data-driven football predictions
+</p>
+
+</header>
+
+<main>
+
+<section class="search-card">
+
+<h2>Analyze a Match</h2>
+
+<p>
+Enter an API-Football fixture ID.
+</p>
+
+<input
+id="fixtureId"
+type="number"
+placeholder="Example: 123456"
+>
+
+<button onclick="analyzeMatch()">
+Analyze Match
+</button>
+
+</section>
+
+<section
+id="loading"
+class="hidden"
+>
+
+Analyzing match data...
+
+</section>
+
+<section
+id="result"
+class="hidden"
+>
+
+<div class="match-card">
+
+<h2 id="matchName"></h2>
+
+<p id="prediction"></p>
+
+<div class="confidence">
+Confidence:
+<span id="confidence"></span>
+</div>
+
+</div>
+
+<div class="stats-card">
+
+<h3>Expected Goals</h3>
+
+<p id="xg"></p>
+
+</div>
+
+<div class="stats-card">
+
+<h3>Match Result Probabilities</h3>
+
+<p id="resultProbabilities"></p>
+
+</div>
+
+<div class="stats-card">
+
+<h3>Top Correct Scores</h3>
+
+<div id="scores"></div>
+
+</div>
+
+</section>
+
+<section
+id="error"
+class="error hidden"
+></section>
+
+</main>
+
+<script src="app.js"></script>
+
+</body>
+
+</html>

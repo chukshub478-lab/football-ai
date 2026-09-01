@@ -1,0 +1,93 @@
+* {
+    box-sizing: border-box;
+}
+
+body {
+    margin: 0;
+    font-family: Arial, sans-serif;
+    background: #07111f;
+    color: white;
+}
+
+header {
+    padding: 30px 20px;
+    text-align: center;
+    background: #0d1b2a;
+}
+
+header h1 {
+    margin: 0 0 8px;
+}
+
+header p {
+    margin: 0;
+    color: #aab7c4;
+}
+
+main {
+    width: 92%;
+    max-width: 700px;
+    margin: 25px auto;
+}
+
+section {
+    margin-bottom: 20px;
+}
+
+.search-card,
+.match-card,
+.stats-card {
+    background: #102235;
+    padding: 20px;
+    border-radius: 14px;
+}
+
+input {
+    width: 100%;
+    padding: 15px;
+    margin: 12px 0;
+    border: 1px solid #31475d;
+    border-radius: 8px;
+    background: #07111f;
+    color: white;
+    font-size: 16px;
+}
+
+button {
+    width: 100%;
+    padding: 15px;
+    border: 0;
+    border-radius: 8px;
+    background: #19c37d;
+    color: #06120d;
+    font-size: 16px;
+    font-weight: bold;
+    cursor: pointer;
+}
+
+.confidence {
+    font-size: 18px;
+    margin-top: 15px;
+}
+
+#confidence {
+    font-weight: bold;
+}
+
+.score-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 13px 0;
+    border-bottom: 1px solid #263a4e;
+}
+
+.hidden {
+    display: none;
+}
+
+.error {
+    padding: 15px;
+    border-radius: 8px;
+    background: #421d25;
+    color: #ffb4bd;
+}
