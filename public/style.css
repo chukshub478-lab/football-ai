@@ -3,91 +3,356 @@
 }
 
 body {
+
     margin: 0;
-    font-family: Arial, sans-serif;
+
+    font-family:
+        Arial,
+        sans-serif;
+
     background: #07111f;
+
     color: white;
+
 }
+
 
 header {
-    padding: 30px 20px;
+
+    padding: 28px 20px;
+
     text-align: center;
+
     background: #0d1b2a;
+
 }
+
 
 header h1 {
+
     margin: 0 0 8px;
+
+    font-size: 27px;
+
 }
+
 
 header p {
+
     margin: 0;
+
     color: #aab7c4;
+
 }
+
 
 main {
+
     width: 92%;
-    max-width: 700px;
+
+    max-width: 750px;
+
     margin: 25px auto;
+
 }
 
-section {
-    margin-bottom: 20px;
-}
 
-.search-card,
-.match-card,
+.top-card,
+.analysis-card,
 .stats-card {
+
     background: #102235;
+
     padding: 20px;
+
     border-radius: 14px;
+
+    margin-bottom: 18px;
+
 }
 
-input {
-    width: 100%;
-    padding: 15px;
-    margin: 12px 0;
-    border: 1px solid #31475d;
-    border-radius: 8px;
-    background: #07111f;
-    color: white;
-    font-size: 16px;
+
+.controls {
+
+    display: flex;
+
+    gap: 10px;
+
 }
+
+
+select {
+
+    flex: 1;
+
+    padding: 13px;
+
+    border-radius: 8px;
+
+    border:
+        1px solid #31475d;
+
+    background: #07111f;
+
+    color: white;
+
+}
+
+
+.refresh-btn {
+
+    width: auto;
+
+    padding:
+        0 18px;
+
+}
+
 
 button {
-    width: 100%;
-    padding: 15px;
+
+    padding: 14px;
+
     border: 0;
+
     border-radius: 8px;
+
     background: #19c37d;
+
     color: #06120d;
-    font-size: 16px;
+
+    font-size: 15px;
+
     font-weight: bold;
+
     cursor: pointer;
+
 }
 
-.confidence {
-    font-size: 18px;
-    margin-top: 15px;
+
+.fixture-card {
+
+    background: #102235;
+
+    padding: 18px;
+
+    border-radius: 14px;
+
+    margin-bottom: 14px;
+
 }
 
-#confidence {
+
+.league-name {
+
+    color: #19c37d;
+
+    font-size: 14px;
+
     font-weight: bold;
+
+    margin-bottom: 15px;
+
 }
+
+
+.teams {
+
+    display: grid;
+
+    grid-template-columns:
+        1fr
+        auto
+        1fr;
+
+    align-items: center;
+
+    text-align: center;
+
+    gap: 10px;
+
+}
+
+
+.team {
+
+    font-weight: bold;
+
+}
+
+
+.vs {
+
+    color: #8b9aaa;
+
+    font-size: 13px;
+
+}
+
+
+.match-time {
+
+    text-align: center;
+
+    color: #aab7c4;
+
+    margin:
+        15px 0;
+
+}
+
+
+.analyze-btn {
+
+    width: 100%;
+
+}
+
+
+.message {
+
+    text-align: center;
+
+    padding: 25px;
+
+    color: #aab7c4;
+
+}
+
+
+.analysis-card {
+
+    margin-top: 15px;
+
+}
+
+
+.back-btn {
+
+    background: #263a4e;
+
+    color: white;
+
+    margin-bottom: 18px;
+
+}
+
+
+.league {
+
+    color: #19c37d;
+
+}
+
+
+.prediction-box {
+
+    text-align: center;
+
+    padding: 25px;
+
+    background: #07111f;
+
+    border-radius: 12px;
+
+    margin:
+        20px 0;
+
+}
+
+
+.label {
+
+    color: #aab7c4;
+
+    margin-bottom: 8px;
+
+}
+
+
+.big-score {
+
+    font-size: 48px;
+
+    font-weight: bold;
+
+    margin:
+        8px 0 15px;
+
+}
+
+
+.stat-line,
+.probabilities {
+
+    font-size: 18px;
+
+    font-weight: bold;
+
+}
+
 
 .score-row {
+
     display: flex;
-    justify-content: space-between;
+
+    justify-content:
+        space-between;
+
     padding: 13px 0;
-    border-bottom: 1px solid #263a4e;
+
+    border-bottom:
+        1px solid #263a4e;
+
 }
 
-.hidden {
-    display: none;
-}
 
 .error {
+
     padding: 15px;
+
     border-radius: 8px;
+
     background: #421d25;
+
     color: #ffb4bd;
+
 }
+
+
+.hidden {
+
+    display: none;
+
+}
+
+
+@media (
+    max-width: 500px
+) {
+
+    .controls {
+
+        flex-direction:
+            column;
+
+    }
+
+    .refresh-btn {
+
+        width: 100%;
+
+        padding: 14px;
+
+    }
+
+    .teams {
+
+        grid-template-columns:
+            1fr
+            auto
+            1fr;
+
+    }
+
+    }
