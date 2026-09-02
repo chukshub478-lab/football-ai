@@ -23,7 +23,7 @@ href="style.css"
 
 <header>
 
-<h1>Football AI Analyst</h1>
+<h1>⚽ Football AI Analyst</h1>
 
 <p>
 Data-driven football predictions
@@ -31,70 +31,134 @@ Data-driven football predictions
 
 </header>
 
+
 <main>
 
-<section class="search-card">
+<section class="top-card">
 
-<h2>Analyze a Match</h2>
+<h2>Today's Matches</h2>
 
-<p>
-Enter an API-Football fixture ID.
-</p>
+<div class="controls">
 
-<input
-id="fixtureId"
-type="number"
-placeholder="Example: 123456"
+<select id="leagueFilter">
+
+<option value="all">
+All Leagues
+</option>
+
+</select>
+
+<button
+onclick="loadFixtures()"
+class="refresh-btn"
 >
-
-<button onclick="analyzeMatch()">
-Analyze Match
+Refresh
 </button>
 
+</div>
+
 </section>
+
 
 <section
 id="loading"
-class="hidden"
+class="message hidden"
 >
 
-Analyzing match data...
+Loading today's matches...
 
 </section>
 
+
 <section
-id="result"
+id="fixtures"
+>
+
+</section>
+
+
+<section
+id="empty"
+class="message hidden"
+>
+
+No fixtures found for today.
+
+</section>
+
+
+<section
+id="analysis"
 class="hidden"
 >
 
-<div class="match-card">
+<button
+onclick="closeAnalysis()"
+class="back-btn"
+>
+← Back to Matches
+</button>
 
-<h2 id="matchName"></h2>
 
-<p id="prediction"></p>
+<div class="analysis-card">
 
-<div class="confidence">
-Confidence:
-<span id="confidence"></span>
+<h2 id="analysisMatch"></h2>
+
+<p
+id="analysisLeague"
+class="league"
+></p>
+
+
+<div class="prediction-box">
+
+<div class="label">
+Correct Score Prediction
+</div>
+
+<div
+id="correctScore"
+class="big-score"
+>
+-
+</div>
+
+<div>
+Model confidence:
+<span id="confidence">
+-
+</span>
 </div>
 
 </div>
+
 
 <div class="stats-card">
 
 <h3>Expected Goals</h3>
 
-<p id="xg"></p>
+<div
+id="expectedGoals"
+class="stat-line"
+>
+-
+</div>
 
 </div>
+
 
 <div class="stats-card">
 
-<h3>Match Result Probabilities</h3>
+<h3>Match Result</h3>
 
-<p id="resultProbabilities"></p>
+<div
+id="resultProbabilities"
+class="probabilities"
+>
+</div>
 
 </div>
+
 
 <div class="stats-card">
 
@@ -104,7 +168,10 @@ Confidence:
 
 </div>
 
+</div>
+
 </section>
+
 
 <section
 id="error"
@@ -113,8 +180,9 @@ class="error hidden"
 
 </main>
 
+
 <script src="app.js"></script>
 
 </body>
 
-</html>
+  </html>
