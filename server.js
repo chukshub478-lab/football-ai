@@ -6,30 +6,42 @@ const path = require("path");
 
 const app = express();
 
-app.use(cors());
-app.use(express.json());
-app.use(express.static(path.join(__dirname, "public")));
-
-const PORT = process.env.PORT || 10000;
+const PORT = Number(process.env.PORT) || 10000;
 const API_KEY = process.env.API_FOOTBALL_KEY;
-
 const API_URL = "https://v3.football.api-sports.io";
 
-const cache = new Map();
-
 const CACHE_TIME = 10 * 60 * 1000;
+const cache = new Map();
 
 
 /*
 ========================================
-FOOTBALL API HELPER
+MIDDLEWARE
+========================================
+*/
+
+app.use(cors());
+app.use(express.json());
+
+app.use(
+    express.static(
+        path.join(__dirname, "public")
+    )
+);
+
+
+/*
+========================================
+API HELPER
 ========================================
 */
 
 async function footballAPI(endpoint) {
 
     if (!API_KEY) {
-        throw new Error("API_FOOTBALL_KEY is missing.");
+        throw new Error(
+            "API_FOOTBALL_KEY is missing."
+        );
     }
 
     const cached = cache.get(endpoint);
@@ -44,6 +56,7 @@ async function footballAPI(endpoint) {
     const response = await fetch(
         `${API_URL}${endpoint}`,
         {
+            method: "GET",
             headers: {
                 "x-apisports-key": API_KEY,
                 "Accept": "application/json"
@@ -79,105 +92,163 @@ async function footballAPI(endpoint) {
 
 /*
 ========================================
-GET TODAY'S FIXTURES
+HEALTH CHECK
 ========================================
 */
 
-app.get("/api/fixtures", async (req, res) => {
-
-    try {
-
-        let date = req.query.date;
-
-        if (!date) {
-
-            const formatter =
-                new Intl.DateTimeFormat(
-                    "en-CA",
-                    {
-                        timeZone: "Africa/Lagos",
-                        year: "numeric",
-                        month: "2-digit",
-                        day: "2-digit"
-                    }
-                );
-
-            date = formatter.format(
-                new Date()
-            );
-        }
-
-        const endpoint =
-            `/fixtures?date=${date}&timezone=Africa/Lagos`;
-
-        const data =
-            await footballAPI(endpoint);
-
-        const fixtures =
-            (data.response || []).map(item => ({
-
-                id: item.fixture.id,
-
-                date: item.fixture.date,
-
-                status: item.fixture.status,
-
-                league: {
-                    id: item.league.id,
-                    name: item.league.name,
-                    country: item.league.country,
-                    logo: item.league.logo
-                },
-
-                home: {
-                    id: item.teams.home.id,
-                    name: item.teams.home.name,
-                    logo: item.teams.home.logo
-                },
-
-                away: {
-                    id: item.teams.away.id,
-                    name: item.teams.away.name,
-                    logo: item.teams.away.logo
-                }
-
-            }));
+app.get(
+    "/api/health",
+    (req, res) => {
 
         res.json({
-
             success: true,
-
-            date,
-
-            count: fixtures.length,
-
-            fixtures
-
-        });
-
-    } catch (error) {
-
-        console.error(error);
-
-        res.status(500).json({
-
-            success: false,
-
-            message: error.message
-
+            message: "Football AI backend is running",
+            port: PORT,
+            apiKeyConfigured: Boolean(API_KEY)
         });
 
     }
-
-});
+);
 
 
 /*
 ========================================
-FORM HELPERS
+TODAY'S FIXTURES
 ========================================
 */
 
+app.get(
+    "/api/fixtures",
+    async (req, res) => {
+
+        try {
+
+            let date = req.query.date;
+
+            if (!date) {
+
+                const formatter =
+                    new Intl.DateTimeFormat(
+                        "en-CA",
+                        {
+                            timeZone: "Africa/Lagos",
+                            year: "numeric",
+                            month: "2-digit",
+                            day: "2-digit"
+                        }
+                    );
+
+                date = formatter.format(
+                    new Date()
+                );
+
+            }
+
+            const endpoint =
+                `/fixtures?date=${date}&timezone=Africa/Lagos`;
+
+            const data =
+                await footballAPI(endpoint);
+
+            const fixtures =
+                (data.response || [])
+                    .map(item => ({
+
+                        id:
+                            item.fixture.id,
+
+                        date:
+                            item.fixture.date,
+
+                        status:
+                            item.fixture.status,
+
+                        league: {
+
+                            id:
+                                item.league.id,
+
+                            name:
+                                item.league.name,
+
+                            country:
+                                item.league.country,
+
+                            logo:
+                                item.league.logo
+
+                        },
+
+                        home: {
+
+                            id:
+                                item.teams.home.id,
+
+                            name:
+                                item.teams.home.name,
+
+                            logo:
+                                item.teams.home.logo
+
+                        },
+
+                        away: {
+
+                            id:
+                                item.teams.away.id,
+
+                            name:
+                                item.teams.away.name,
+
+                            logo:
+                                item.teams.away.logo
+
+                        }
+
+                    }));
+
+
+            res.json({
+
+                success: true,
+
+                date,
+
+                count:
+                    fixtures.length,
+
+                fixtures
+
+            });
+
+
+        } catch (error) {
+
+            console.error(
+                "Fixtures error:",
+                error
+            );
+
+            res.status(500).json({
+
+                success: false,
+
+                message:
+                    error.message
+
+            });
+
+        }
+
+    }
+);
+
+
+/*
+========================================
+TEAM RESULT
+========================================
+*/
 
 function getResultForTeam(
     fixture,
@@ -196,12 +267,16 @@ function getResultForTeam(
     const awayGoals =
         fixture.goals.away;
 
+
     if (
         homeGoals === null ||
-        awayGoals === null
+        awayGoals === null ||
+        homeGoals === undefined ||
+        awayGoals === undefined
     ) {
         return null;
     }
+
 
     if (teamId === homeId) {
 
@@ -214,7 +289,9 @@ function getResultForTeam(
         }
 
         return "L";
+
     }
+
 
     if (teamId === awayId) {
 
@@ -227,11 +304,19 @@ function getResultForTeam(
         }
 
         return "L";
+
     }
+
 
     return null;
 }
 
+
+/*
+========================================
+CALCULATE FORM
+========================================
+*/
 
 function calculateTeamForm(
     fixtures,
@@ -247,6 +332,7 @@ function calculateTeamForm(
 
     const matches = [];
 
+
     for (const fixture of fixtures) {
 
         const result =
@@ -259,21 +345,26 @@ function calculateTeamForm(
             continue;
         }
 
+
         const isHome =
             fixture.teams.home.id === teamId;
+
 
         const scored =
             isHome
                 ? fixture.goals.home
                 : fixture.goals.away;
 
+
         const conceded =
             isHome
                 ? fixture.goals.away
                 : fixture.goals.home;
 
+
         goalsFor += scored;
         goalsAgainst += conceded;
+
 
         if (result === "W") {
             wins++;
@@ -286,6 +377,7 @@ function calculateTeamForm(
         if (result === "L") {
             losses++;
         }
+
 
         matches.push({
 
@@ -307,25 +399,32 @@ function calculateTeamForm(
 
             result,
 
-            goalsFor: scored,
+            goalsFor:
+                scored,
 
-            goalsAgainst: conceded
+            goalsAgainst:
+                conceded
 
         });
+
     }
+
 
     const played =
         matches.length;
 
+
     const averageGoalsFor =
-        played
+        played > 0
             ? goalsFor / played
             : 0;
 
+
     const averageGoalsAgainst =
-        played
+        played > 0
             ? goalsAgainst / played
             : 0;
+
 
     return {
 
@@ -365,7 +464,7 @@ function calculateTeamForm(
 
 /*
 ========================================
-GET TEAM RECENT MATCHES
+GET RECENT TEAM MATCHES
 ========================================
 */
 
@@ -380,18 +479,20 @@ async function getRecentMatches(
     const data =
         await footballAPI(endpoint);
 
+
     return (
         data.response || []
     )
         .filter(fixture => {
 
+            const status =
+                fixture.fixture.status.short;
+
             return [
                 "FT",
                 "AET",
                 "PEN"
-            ].includes(
-                fixture.fixture.status.short
-            );
+            ].includes(status);
 
         })
         .sort(
@@ -399,12 +500,13 @@ async function getRecentMatches(
                 new Date(b.fixture.date) -
                 new Date(a.fixture.date)
         );
+
 }
 
 
 /*
 ========================================
-GET HOME/AWAY FORM
+FILTER HOME / AWAY MATCHES
 ========================================
 */
 
@@ -414,36 +516,40 @@ function filterVenueMatches(
     venue
 ) {
 
-    return fixtures.filter(fixture => {
+    return fixtures.filter(
+        fixture => {
 
-        if (venue === "home") {
+            if (venue === "home") {
 
-            return (
-                fixture.teams.home.id ===
-                teamId
-            );
+                return (
+                    fixture.teams.home.id ===
+                    teamId
+                );
+
+            }
+
+
+            if (venue === "away") {
+
+                return (
+                    fixture.teams.away.id ===
+                    teamId
+                );
+
+            }
+
+
+            return false;
 
         }
-
-        if (venue === "away") {
-
-            return (
-                fixture.teams.away.id ===
-                teamId
-            );
-
-        }
-
-        return false;
-
-    });
+    );
 
 }
 
 
 /*
 ========================================
-POISSON MODEL
+FACTORIAL
 ========================================
 */
 
@@ -470,6 +576,12 @@ function factorial(n) {
 }
 
 
+/*
+========================================
+POISSON
+========================================
+*/
+
 function poisson(
     lambda,
     k
@@ -484,12 +596,19 @@ function poisson(
 }
 
 
+/*
+========================================
+SCORE MATRIX
+========================================
+*/
+
 function generateScoreMatrix(
     homeGoals,
     awayGoals
 ) {
 
     const scores = [];
+
 
     for (
         let home = 0;
@@ -513,6 +632,7 @@ function generateScoreMatrix(
                     away
                 );
 
+
             scores.push({
 
                 home,
@@ -527,16 +647,24 @@ function generateScoreMatrix(
 
     }
 
+
     scores.sort(
         (a, b) =>
             b.probability -
             a.probability
     );
 
+
     return scores;
 
 }
 
+
+/*
+========================================
+PERCENTAGE
+========================================
+*/
 
 function percentage(value) {
 
@@ -549,7 +677,7 @@ function percentage(value) {
 
 /*
 ========================================
-CALCULATE EXPECTED GOALS
+EXPECTED GOALS
 ========================================
 */
 
@@ -560,53 +688,29 @@ function calculateExpectedGoals(
     awayVenueForm
 ) {
 
-    /*
-    Home attacking strength
-    */
-
     const homeAttack =
-        homeVenueForm.averageGoalsFor ||
-        homeForm.averageGoalsFor ||
-        1.20;
+        homeVenueForm.averageGoalsFor > 0
+            ? homeVenueForm.averageGoalsFor
+            : homeForm.averageGoalsFor || 1.20;
 
-
-    /*
-    Home defensive weakness
-    */
 
     const homeDefense =
-        homeVenueForm.averageGoalsAgainst ||
-        homeForm.averageGoalsAgainst ||
-        1.20;
+        homeVenueForm.averageGoalsAgainst > 0
+            ? homeVenueForm.averageGoalsAgainst
+            : homeForm.averageGoalsAgainst || 1.20;
 
-
-    /*
-    Away attacking strength
-    */
 
     const awayAttack =
-        awayVenueForm.averageGoalsFor ||
-        awayForm.averageGoalsFor ||
-        1.00;
+        awayVenueForm.averageGoalsFor > 0
+            ? awayVenueForm.averageGoalsFor
+            : awayForm.averageGoalsFor || 1.00;
 
-
-    /*
-    Away defensive weakness
-    */
 
     const awayDefense =
-        awayVenueForm.averageGoalsAgainst ||
-        awayForm.averageGoalsAgainst ||
-        1.20;
+        awayVenueForm.averageGoalsAgainst > 0
+            ? awayVenueForm.averageGoalsAgainst
+            : awayForm.averageGoalsAgainst || 1.20;
 
-
-    /*
-    Base expected goals.
-
-    We combine the team's attacking
-    output with the opponent's
-    defensive record.
-    */
 
     let homeExpected =
         (
@@ -623,17 +727,14 @@ function calculateExpectedGoals(
 
 
     /*
-    Home advantage adjustment.
+    Home advantage
     */
 
     homeExpected *= 1.08;
 
 
     /*
-    Form adjustment.
-
-    Recent form gives a small
-    influence on expected goals.
+    Form strength
     */
 
     const homeFormPoints =
@@ -669,7 +770,8 @@ function calculateExpectedGoals(
 
 
     /*
-    Prevent unrealistic values.
+    Keep values within
+    reasonable limits.
     */
 
     homeExpected =
@@ -711,7 +813,7 @@ function calculateExpectedGoals(
 
 /*
 ========================================
-SINGLE FIXTURE ANALYSIS
+SINGLE MATCH ANALYSIS
 ========================================
 */
 
@@ -726,7 +828,7 @@ app.get(
 
 
             /*
-            Get selected fixture.
+            Get fixture
             */
 
             const fixtureData =
@@ -736,7 +838,8 @@ app.get(
 
 
             if (
-                !fixtureData.response?.length
+                !fixtureData.response ||
+                fixtureData.response.length === 0
             ) {
 
                 return res.status(404).json({
@@ -765,7 +868,7 @@ app.get(
 
             /*
             ========================================
-            RECENT FORM
+            RECENT MATCHES
             ========================================
             */
 
@@ -783,6 +886,12 @@ app.get(
                 );
 
 
+            /*
+            ========================================
+            OVERALL FORM
+            ========================================
+            */
+
             const homeForm =
                 calculateTeamForm(
                     homeRecent,
@@ -799,15 +908,11 @@ app.get(
 
             /*
             ========================================
-            HOME / AWAY FORM
+            HOME FORM
             ========================================
-
-            We retrieve 10 recent matches
-            so we have enough matches to
-            extract home and away records.
             */
 
-            const homeVenueMatches =
+            const homeMatches =
                 filterVenueMatches(
                     homeRecent,
                     homeTeam.id,
@@ -815,7 +920,20 @@ app.get(
                 );
 
 
-            const awayVenueMatches =
+            const homeVenueForm =
+                calculateTeamForm(
+                    homeMatches,
+                    homeTeam.id
+                );
+
+
+            /*
+            ========================================
+            AWAY FORM
+            ========================================
+            */
+
+            const awayMatches =
                 filterVenueMatches(
                     awayRecent,
                     awayTeam.id,
@@ -823,16 +941,9 @@ app.get(
                 );
 
 
-            const homeVenueForm =
-                calculateTeamForm(
-                    homeVenueMatches,
-                    homeTeam.id
-                );
-
-
             const awayVenueForm =
                 calculateTeamForm(
-                    awayVenueMatches,
+                    awayMatches,
                     awayTeam.id
                 );
 
@@ -865,22 +976,6 @@ app.get(
                 );
 
 
-            const topScores =
-                scoreMatrix
-                    .slice(0, 5)
-                    .map(score => ({
-
-                        score:
-                            `${score.home}-${score.away}`,
-
-                        probability:
-                            percentage(
-                                score.probability
-                            )
-
-                    }));
-
-
             /*
             ========================================
             RESULT PROBABILITIES
@@ -888,52 +983,107 @@ app.get(
             */
 
             let homeWin = 0;
-
             let draw = 0;
-
             let awayWin = 0;
 
+            let bttsYes = 0;
+            let over25 = 0;
 
-            scoreMatrix.forEach(score => {
 
-                if (
-                    score.home >
-                    score.away
-                ) {
+            scoreMatrix.forEach(
+                score => {
 
-                    homeWin +=
-                        score.probability;
+                    if (
+                        score.home >
+                        score.away
+                    ) {
+
+                        homeWin +=
+                            score.probability;
+
+                    }
+
+
+                    if (
+                        score.home ===
+                        score.away
+                    ) {
+
+                        draw +=
+                            score.probability;
+
+                    }
+
+
+                    if (
+                        score.home <
+                        score.away
+                    ) {
+
+                        awayWin +=
+                            score.probability;
+
+                    }
+
+
+                    if (
+                        score.home >= 1 &&
+                        score.away >= 1
+                    ) {
+
+                        bttsYes +=
+                            score.probability;
+
+                    }
+
+
+                    if (
+                        score.home +
+                        score.away >= 3
+                    ) {
+
+                        over25 +=
+                            score.probability;
+
+                    }
 
                 }
+            );
 
 
-                if (
-                    score.home ===
-                    score.away
-                ) {
+            /*
+            ========================================
+            TOP SCORES
+            ========================================
+            */
 
-                    draw +=
-                        score.probability;
+            const topScores =
+                scoreMatrix
+                    .slice(0, 5)
+                    .map(
+                        score => ({
 
-                }
+                            score:
+                                `${score.home}-${score.away}`,
 
+                            probability:
+                                percentage(
+                                    score.probability
+                                )
 
-                if (
-                    score.home <
-                    score.away
-                ) {
-
-                    awayWin +=
-                        score.probability;
-
-                }
-
-            });
+                        })
+                    );
 
 
             const bestScore =
                 scoreMatrix[0];
 
+
+            /*
+            ========================================
+            WINNER
+            ========================================
+            */
 
             let winner =
                 "Draw";
@@ -971,156 +1121,6 @@ app.get(
 
             /*
             ========================================
-            BTTS
-            ========================================
-            */
-
-            let bttsYes = 0;
-
-
-            scoreMatrix.forEach(score => {
-
-                if (
-                    score.home >= 1 &&
-                    score.away >= 1
-                ) {
-
-                    bttsYes +=
-                        score.probability;
-
-                }
-
-            });
-
-
-            /*
-            ========================================
-            OVER 2.5
-            ========================================
-            */
-
-            let over25 = 0;
-
-
-            scoreMatrix.forEach(score => {
-
-                if (
-                    score.home +
-                    score.away >= 3
-                ) {
-
-                    over25 +=
-                        score.probability;
-
-                }
-
-            });
-
-
-            /*
-            ========================================
             RESPONSE
             ========================================
-            */
-
-            res.json({
-
-                success: true,
-
-                match: {
-
-                    id:
-                        fixture.fixture.id,
-
-                    date:
-                        fixture.fixture.date,
-
-                    home:
-                        homeTeam.name,
-
-                    away:
-                        awayTeam.name,
-
-                    homeLogo:
-                        homeTeam.logo,
-
-                    awayLogo:
-                        awayTeam.logo,
-
-                    league:
-                        fixture.league.name
-
-                },
-
-
-                form: {
-
-                    home: {
-
-                        team:
-                            homeTeam.name,
-
-                        recent:
-                            homeForm,
-
-                        homeVenue:
-                            homeVenueForm
-
-                    },
-
-                    away: {
-
-                        team:
-                            awayTeam.name,
-
-                        recent:
-                            awayForm,
-
-                        awayVenue:
-                            awayVenueForm
-
-                    }
-
-                },
-
-
-                model: {
-
-                    prediction:
-                        `${bestScore.home}-${bestScore.away}`,
-
-                    predictedWinner:
-                        winner,
-
-                    confidence:
-                        percentage(confidence),
-
-                    expectedGoals: {
-
-                        home:
-                            expectedGoals.home,
-
-                        away:
-                            expectedGoals.away
-
-                    },
-
-                    resultProbabilities: {
-
-                        homeWin:
-                            percentage(homeWin),
-
-                        draw:
-                            percentage(draw),
-
-                        awayWin:
-                            percentage(awayWin)
-
-                    },
-
-                    markets: {
-
-                        bttsYes:
-                            percentage(bttsYes),
-
-                   
+    
