@@ -17,6 +17,15 @@ const API_URL = "https://v3.football.api-sports.io";
 
 const cache = new Map();
 
+const CACHE_TIME = 10 * 60 * 1000;
+
+
+/*
+========================================
+FOOTBALL API HELPER
+========================================
+*/
+
 async function footballAPI(endpoint) {
 
     if (!API_KEY) {
@@ -27,7 +36,7 @@ async function footballAPI(endpoint) {
 
     if (
         cached &&
-        Date.now() - cached.time < 10 * 60 * 1000
+        Date.now() - cached.time < CACHE_TIME
     ) {
         return cached.data;
     }
@@ -36,7 +45,8 @@ async function footballAPI(endpoint) {
         `${API_URL}${endpoint}`,
         {
             headers: {
-                "x-apisports-key": API_KEY
+                "x-apisports-key": API_KEY,
+                "Accept": "application/json"
             }
         }
     );
@@ -78,11 +88,6 @@ app.get("/api/fixtures", async (req, res) => {
     try {
 
         let date = req.query.date;
-
-        /*
-        If no date is supplied,
-        use today's date in Nigeria.
-        */
 
         if (!date) {
 
@@ -169,32 +174,312 @@ app.get("/api/fixtures", async (req, res) => {
 
 /*
 ========================================
-SINGLE FIXTURE ANALYSIS
+FORM HELPERS
 ========================================
 */
 
-function poisson(lambda, k) {
+
+function getResultForTeam(
+    fixture,
+    teamId
+) {
+
+    const homeId =
+        fixture.teams.home.id;
+
+    const awayId =
+        fixture.teams.away.id;
+
+    const homeGoals =
+        fixture.goals.home;
+
+    const awayGoals =
+        fixture.goals.away;
+
+    if (
+        homeGoals === null ||
+        awayGoals === null
+    ) {
+        return null;
+    }
+
+    if (teamId === homeId) {
+
+        if (homeGoals > awayGoals) {
+            return "W";
+        }
+
+        if (homeGoals === awayGoals) {
+            return "D";
+        }
+
+        return "L";
+    }
+
+    if (teamId === awayId) {
+
+        if (awayGoals > homeGoals) {
+            return "W";
+        }
+
+        if (awayGoals === homeGoals) {
+            return "D";
+        }
+
+        return "L";
+    }
+
+    return null;
+}
+
+
+function calculateTeamForm(
+    fixtures,
+    teamId
+) {
+
+    let wins = 0;
+    let draws = 0;
+    let losses = 0;
+
+    let goalsFor = 0;
+    let goalsAgainst = 0;
+
+    const matches = [];
+
+    for (const fixture of fixtures) {
+
+        const result =
+            getResultForTeam(
+                fixture,
+                teamId
+            );
+
+        if (!result) {
+            continue;
+        }
+
+        const isHome =
+            fixture.teams.home.id === teamId;
+
+        const scored =
+            isHome
+                ? fixture.goals.home
+                : fixture.goals.away;
+
+        const conceded =
+            isHome
+                ? fixture.goals.away
+                : fixture.goals.home;
+
+        goalsFor += scored;
+        goalsAgainst += conceded;
+
+        if (result === "W") {
+            wins++;
+        }
+
+        if (result === "D") {
+            draws++;
+        }
+
+        if (result === "L") {
+            losses++;
+        }
+
+        matches.push({
+
+            fixtureId:
+                fixture.fixture.id,
+
+            date:
+                fixture.fixture.date,
+
+            opponent:
+                isHome
+                    ? fixture.teams.away.name
+                    : fixture.teams.home.name,
+
+            venue:
+                isHome
+                    ? "Home"
+                    : "Away",
+
+            result,
+
+            goalsFor: scored,
+
+            goalsAgainst: conceded
+
+        });
+    }
+
+    const played =
+        matches.length;
+
+    const averageGoalsFor =
+        played
+            ? goalsFor / played
+            : 0;
+
+    const averageGoalsAgainst =
+        played
+            ? goalsAgainst / played
+            : 0;
+
+    return {
+
+        played,
+
+        wins,
+
+        draws,
+
+        losses,
+
+        goalsFor,
+
+        goalsAgainst,
+
+        averageGoalsFor:
+            Number(
+                averageGoalsFor.toFixed(2)
+            ),
+
+        averageGoalsAgainst:
+            Number(
+                averageGoalsAgainst.toFixed(2)
+            ),
+
+        form:
+            matches
+                .map(match => match.result)
+                .join(""),
+
+        matches
+
+    };
+
+}
+
+
+/*
+========================================
+GET TEAM RECENT MATCHES
+========================================
+*/
+
+async function getRecentMatches(
+    teamId,
+    number = 10
+) {
+
+    const endpoint =
+        `/fixtures?team=${teamId}&last=${number}`;
+
+    const data =
+        await footballAPI(endpoint);
+
+    return (
+        data.response || []
+    )
+        .filter(fixture => {
+
+            return [
+                "FT",
+                "AET",
+                "PEN"
+            ].includes(
+                fixture.fixture.status.short
+            );
+
+        })
+        .sort(
+            (a, b) =>
+                new Date(b.fixture.date) -
+                new Date(a.fixture.date)
+        );
+}
+
+
+/*
+========================================
+GET HOME/AWAY FORM
+========================================
+*/
+
+function filterVenueMatches(
+    fixtures,
+    teamId,
+    venue
+) {
+
+    return fixtures.filter(fixture => {
+
+        if (venue === "home") {
+
+            return (
+                fixture.teams.home.id ===
+                teamId
+            );
+
+        }
+
+        if (venue === "away") {
+
+            return (
+                fixture.teams.away.id ===
+                teamId
+            );
+
+        }
+
+        return false;
+
+    });
+
+}
+
+
+/*
+========================================
+POISSON MODEL
+========================================
+*/
+
+function factorial(n) {
+
+    if (n <= 1) {
+        return 1;
+    }
+
+    let result = 1;
+
+    for (
+        let i = 2;
+        i <= n;
+        i++
+    ) {
+
+        result *= i;
+
+    }
+
+    return result;
+
+}
+
+
+function poisson(
+    lambda,
+    k
+) {
 
     return (
         Math.exp(-lambda) *
         Math.pow(lambda, k) /
         factorial(k)
     );
-
-}
-
-
-function factorial(n) {
-
-    if (n <= 1) return 1;
-
-    let result = 1;
-
-    for (let i = 2; i <= n; i++) {
-        result *= i;
-    }
-
-    return result;
 
 }
 
@@ -219,13 +504,21 @@ function generateScoreMatrix(
         ) {
 
             const probability =
-                poisson(homeGoals, home) *
-                poisson(awayGoals, away);
+                poisson(
+                    homeGoals,
+                    home
+                ) *
+                poisson(
+                    awayGoals,
+                    away
+                );
 
             scores.push({
 
                 home,
+
                 away,
+
                 probability
 
             });
@@ -248,12 +541,179 @@ function generateScoreMatrix(
 function percentage(value) {
 
     return (
-        (value * 100)
-        .toFixed(1) + "%"
-    );
+        value * 100
+    ).toFixed(1) + "%";
 
 }
 
+
+/*
+========================================
+CALCULATE EXPECTED GOALS
+========================================
+*/
+
+function calculateExpectedGoals(
+    homeForm,
+    awayForm,
+    homeVenueForm,
+    awayVenueForm
+) {
+
+    /*
+    Home attacking strength
+    */
+
+    const homeAttack =
+        homeVenueForm.averageGoalsFor ||
+        homeForm.averageGoalsFor ||
+        1.20;
+
+
+    /*
+    Home defensive weakness
+    */
+
+    const homeDefense =
+        homeVenueForm.averageGoalsAgainst ||
+        homeForm.averageGoalsAgainst ||
+        1.20;
+
+
+    /*
+    Away attacking strength
+    */
+
+    const awayAttack =
+        awayVenueForm.averageGoalsFor ||
+        awayForm.averageGoalsFor ||
+        1.00;
+
+
+    /*
+    Away defensive weakness
+    */
+
+    const awayDefense =
+        awayVenueForm.averageGoalsAgainst ||
+        awayForm.averageGoalsAgainst ||
+        1.20;
+
+
+    /*
+    Base expected goals.
+
+    We combine the team's attacking
+    output with the opponent's
+    defensive record.
+    */
+
+    let homeExpected =
+        (
+            homeAttack +
+            awayDefense
+        ) / 2;
+
+
+    let awayExpected =
+        (
+            awayAttack +
+            homeDefense
+        ) / 2;
+
+
+    /*
+    Home advantage adjustment.
+    */
+
+    homeExpected *= 1.08;
+
+
+    /*
+    Form adjustment.
+
+    Recent form gives a small
+    influence on expected goals.
+    */
+
+    const homeFormPoints =
+        (
+            homeForm.wins * 3 +
+            homeForm.draws
+        ) /
+        Math.max(
+            homeForm.played * 3,
+            1
+        );
+
+
+    const awayFormPoints =
+        (
+            awayForm.wins * 3 +
+            awayForm.draws
+        ) /
+        Math.max(
+            awayForm.played * 3,
+            1
+        );
+
+
+    homeExpected *=
+        0.90 +
+        homeFormPoints * 0.20;
+
+
+    awayExpected *=
+        0.90 +
+        awayFormPoints * 0.20;
+
+
+    /*
+    Prevent unrealistic values.
+    */
+
+    homeExpected =
+        Math.max(
+            0.20,
+            Math.min(
+                homeExpected,
+                4.00
+            )
+        );
+
+
+    awayExpected =
+        Math.max(
+            0.20,
+            Math.min(
+                awayExpected,
+                4.00
+            )
+        );
+
+
+    return {
+
+        home:
+            Number(
+                homeExpected.toFixed(2)
+            ),
+
+        away:
+            Number(
+                awayExpected.toFixed(2)
+            )
+
+    };
+
+}
+
+
+/*
+========================================
+SINGLE FIXTURE ANALYSIS
+========================================
+*/
 
 app.get(
     "/api/fixture/:id",
@@ -264,10 +724,16 @@ app.get(
             const fixtureId =
                 req.params.id;
 
+
+            /*
+            Get selected fixture.
+            */
+
             const fixtureData =
                 await footballAPI(
                     `/fixtures?id=${fixtureId}`
                 );
+
 
             if (
                 !fixtureData.response?.length
@@ -284,76 +750,118 @@ app.get(
 
             }
 
+
             const fixture =
                 fixtureData.response[0];
 
+
             const homeTeam =
                 fixture.teams.home;
+
 
             const awayTeam =
                 fixture.teams.away;
 
 
             /*
-            Get API-Football prediction
+            ========================================
+            RECENT FORM
+            ========================================
             */
 
-            const predictionData =
-                await footballAPI(
-                    `/predictions?fixture=${fixtureId}`
+            const homeRecent =
+                await getRecentMatches(
+                    homeTeam.id,
+                    10
                 );
 
-            const apiPrediction =
-                predictionData.response?.[0] ||
-                null;
+
+            const awayRecent =
+                await getRecentMatches(
+                    awayTeam.id,
+                    10
+                );
+
+
+            const homeForm =
+                calculateTeamForm(
+                    homeRecent,
+                    homeTeam.id
+                );
+
+
+            const awayForm =
+                calculateTeamForm(
+                    awayRecent,
+                    awayTeam.id
+                );
 
 
             /*
-            Default values.
-            These are only used if the
-            API prediction has no goals.
+            ========================================
+            HOME / AWAY FORM
+            ========================================
+
+            We retrieve 10 recent matches
+            so we have enough matches to
+            extract home and away records.
             */
 
-            let homeExpectedGoals = 1.35;
+            const homeVenueMatches =
+                filterVenueMatches(
+                    homeRecent,
+                    homeTeam.id,
+                    "home"
+                );
 
-            let awayExpectedGoals = 1.05;
+
+            const awayVenueMatches =
+                filterVenueMatches(
+                    awayRecent,
+                    awayTeam.id,
+                    "away"
+                );
 
 
-            if (
-                apiPrediction?.predictions?.goals
-            ) {
+            const homeVenueForm =
+                calculateTeamForm(
+                    homeVenueMatches,
+                    homeTeam.id
+                );
 
-                const home =
-                    parseFloat(
-                        apiPrediction
-                            .predictions
-                            .goals
-                            .home
-                    );
 
-                const away =
-                    parseFloat(
-                        apiPrediction
-                            .predictions
-                            .goals
-                            .away
-                    );
+            const awayVenueForm =
+                calculateTeamForm(
+                    awayVenueMatches,
+                    awayTeam.id
+                );
 
-                if (!isNaN(home)) {
-                    homeExpectedGoals = home;
-                }
 
-                if (!isNaN(away)) {
-                    awayExpectedGoals = away;
-                }
+            /*
+            ========================================
+            EXPECTED GOALS
+            ========================================
+            */
 
-            }
+            const expectedGoals =
+                calculateExpectedGoals(
+                    homeForm,
+                    awayForm,
+                    homeVenueForm,
+                    awayVenueForm
+                );
 
+
+            /*
+            ========================================
+            SCORE MATRIX
+            ========================================
+            */
 
             const scoreMatrix =
                 generateScoreMatrix(
-                    homeExpectedGoals,
-                    awayExpectedGoals
+                    expectedGoals.home,
+                    expectedGoals.away
                 );
 
 
@@ -373,8 +881,16 @@ app.get(
                     }));
 
 
+            /*
+            ========================================
+            RESULT PROBABILITIES
+            ========================================
+            */
+
             let homeWin = 0;
+
             let draw = 0;
+
             let awayWin = 0;
 
 
@@ -384,24 +900,32 @@ app.get(
                     score.home >
                     score.away
                 ) {
+
                     homeWin +=
                         score.probability;
+
                 }
+
 
                 if (
                     score.home ===
                     score.away
                 ) {
+
                     draw +=
                         score.probability;
+
                 }
+
 
                 if (
                     score.home <
                     score.away
                 ) {
+
                     awayWin +=
                         score.probability;
+
                 }
 
             });
@@ -411,7 +935,8 @@ app.get(
                 scoreMatrix[0];
 
 
-            let winner = "Draw";
+            let winner =
+                "Draw";
 
 
             if (
@@ -444,6 +969,60 @@ app.get(
                 );
 
 
+            /*
+            ========================================
+            BTTS
+            ========================================
+            */
+
+            let bttsYes = 0;
+
+
+            scoreMatrix.forEach(score => {
+
+                if (
+                    score.home >= 1 &&
+                    score.away >= 1
+                ) {
+
+                    bttsYes +=
+                        score.probability;
+
+                }
+
+            });
+
+
+            /*
+            ========================================
+            OVER 2.5
+            ========================================
+            */
+
+            let over25 = 0;
+
+
+            scoreMatrix.forEach(score => {
+
+                if (
+                    score.home +
+                    score.away >= 3
+                ) {
+
+                    over25 +=
+                        score.probability;
+
+                }
+
+            });
+
+
+            /*
+            ========================================
+            RESPONSE
+            ========================================
+            */
+
             res.json({
 
                 success: true,
@@ -473,6 +1052,38 @@ app.get(
 
                 },
 
+
+                form: {
+
+                    home: {
+
+                        team:
+                            homeTeam.name,
+
+                        recent:
+                            homeForm,
+
+                        homeVenue:
+                            homeVenueForm
+
+                    },
+
+                    away: {
+
+                        team:
+                            awayTeam.name,
+
+                        recent:
+                            awayForm,
+
+                        awayVenue:
+                            awayVenueForm
+
+                    }
+
+                },
+
+
                 model: {
 
                     prediction:
@@ -487,10 +1098,10 @@ app.get(
                     expectedGoals: {
 
                         home:
-                            homeExpectedGoals,
+                            expectedGoals.home,
 
                         away:
-                            awayExpectedGoals
+                            expectedGoals.away
 
                     },
 
@@ -507,82 +1118,9 @@ app.get(
 
                     },
 
-                    topCorrectScores:
-                        topScores
+                    markets: {
 
-                },
+                        bttsYes:
+                            percentage(bttsYes),
 
-                apiPrediction:
-                    apiPrediction?.predictions ||
-                    null
-
-            });
-
-        } catch (error) {
-
-            console.error(error);
-
-            res.status(500).json({
-
-                success: false,
-
-                message: error.message
-
-            });
-
-        }
-
-    }
-);
-
-
-/*
-========================================
-HEALTH CHECK
-========================================
-*/
-
-app.get("/api/health", (req, res) => {
-
-    res.json({
-
-        success: true,
-
-        message:
-            "Football AI backend is running"
-
-    });
-
-});
-
-
-/*
-========================================
-FRONTEND
-========================================
-*/
-
-app.get("*", (req, res) => {
-
-    res.sendFile(
-        path.join(
-            __dirname,
-            "public",
-            "index.html"
-        )
-    );
-
-});
-
-
-app.listen(
-    PORT,
-    "0.0.0.0",
-    () => {
-
-        console.log(
-            `Football AI running on port ${PORT}`
-        );
-
-    }
-);
+                   
