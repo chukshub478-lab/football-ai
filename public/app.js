@@ -1,198 +1,142 @@
 let allFixtures = [];
 
+const fixturesSection = document.getElementById("fixtures");
+const loadingSection = document.getElementById("loading");
+const emptySection = document.getElementById("empty");
+const errorSection = document.getElementById("error");
+const analysisSection = document.getElementById("analysis");
+const leagueFilter = document.getElementById("leagueFilter");
+
 
 async function loadFixtures() {
 
-    const fixturesContainer =
-        document.getElementById(
-            "fixtures"
-        );
-
-    const loading =
-        document.getElementById(
-            "loading"
-        );
-
-    const empty =
-        document.getElementById(
-            "empty"
-        );
-
-    const error =
-        document.getElementById(
-            "error"
-        );
-
-    const analysis =
-        document.getElementById(
-            "analysis"
-        );
-
-
-    analysis.classList.add(
-        "hidden"
-    );
-
-    error.classList.add(
-        "hidden"
-    );
-
-    empty.classList.add(
-        "hidden"
-    );
-
-    loading.classList.remove(
-        "hidden"
-    );
-
-
     try {
 
+        loadingSection.style.display = "block";
+        fixturesSection.innerHTML = "";
+        emptySection.style.display = "none";
+        errorSection.style.display = "none";
+
         const response =
-            await fetch(
-                "/api/fixtures"
-            );
+            await fetch("/api/fixtures");
 
         const data =
             await response.json();
 
-
         if (!data.success) {
 
             throw new Error(
-                data.message
+                data.message ||
+                "Unable to load fixtures."
             );
-
         }
 
-
         allFixtures =
-            data.fixtures;
+            data.fixtures || [];
 
+        loadingSection.style.display =
+            "none";
 
-        createLeagueFilter();
+        setupLeagueFilter(
+            allFixtures
+        );
 
         displayFixtures(
             allFixtures
         );
 
+    } catch (error) {
 
-        if (
-            allFixtures.length === 0
-        ) {
+        console.error(error);
 
-            empty.classList.remove(
-                "hidden"
-            );
+        loadingSection.style.display =
+            "none";
 
-        }
+        errorSection.style.display =
+            "block";
 
-    } catch (err) {
-
-        error.textContent =
-            err.message ||
-            "Unable to load fixtures.";
-
-        error.classList.remove(
-            "hidden"
-        );
-
-    } finally {
-
-        loading.classList.add(
-            "hidden"
-        );
-
+        errorSection.innerHTML = `
+            <div class="error-box">
+                <h3>Unable to load matches</h3>
+                <p>${escapeHTML(error.message)}</p>
+                <button onclick="loadFixtures()">
+                    Try Again
+                </button>
+            </div>
+        `;
     }
-
 }
 
 
-function createLeagueFilter() {
+/* =========================
+   LEAGUE FILTER
+========================= */
 
-    const filter =
-        document.getElementById(
-            "leagueFilter"
-        );
+function setupLeagueFilter(fixtures) {
 
+    if (!leagueFilter) {
+        return;
+    }
 
     const leagues = [];
 
-
-    allFixtures.forEach(
+    fixtures.forEach(
         fixture => {
 
-            const exists =
-                leagues.find(
-                    league =>
-                        league.id ===
-                        fixture.league.id
-                );
+            const name =
+                fixture.league?.name;
 
-
-            if (!exists) {
-
-                leagues.push(
-                    fixture.league
-                );
-
+            if (
+                name &&
+                !leagues.includes(name)
+            ) {
+                leagues.push(name);
             }
-
         }
     );
 
+    leagues.sort();
 
-    filter.innerHTML = `
-
+    leagueFilter.innerHTML = `
         <option value="all">
             All Leagues
         </option>
-
     `;
 
+    leagues.forEach(
+        league => {
 
-    leagues
-        .sort(
-            (a, b) =>
-                a.name.localeCompare(
-                    b.name
-                )
-        )
-        .forEach(
-            league => {
-
-                const option =
-                    document.createElement(
-                        "option"
-                    );
-
-                option.value =
-                    league.id;
-
-                option.textContent =
-                    league.name;
-
-                filter.appendChild(
-                    option
+            const option =
+                document.createElement(
+                    "option"
                 );
 
-            }
-        );
+            option.value =
+                league;
 
+            option.textContent =
+                league;
+
+            leagueFilter.appendChild(
+                option
+            );
+        }
+    );
 }
 
 
-document
-    .getElementById(
-        "leagueFilter"
-    )
-    .addEventListener(
+/* =========================
+   FILTER CHANGE
+========================= */
+
+if (leagueFilter) {
+
+    leagueFilter.addEventListener(
         "change",
-        function () {
+        () => {
 
             const selected =
-                this.value;
-
+                leagueFilter.value;
 
             if (
                 selected === "all"
@@ -203,42 +147,85 @@ document
                 );
 
                 return;
-
             }
-
 
             const filtered =
                 allFixtures.filter(
                     fixture =>
-                        String(
-                            fixture.league.id
-                        ) ===
-                        String(selected)
+                        fixture.league?.name ===
+                        selected
                 );
-
 
             displayFixtures(
                 filtered
             );
-
         }
     );
+}
 
 
-function displayFixtures(
-    fixtures
-) {
+/* =========================
+   DISPLAY FIXTURES
+========================= */
 
-    const container =
-        document.getElementById(
-            "fixtures"
+function displayFixtures(fixtures) {
+
+    fixturesSection.innerHTML = "";
+
+    /*
+     * Only show matches that are
+     * upcoming or currently live.
+     */
+
+    const availableFixtures =
+        fixtures.filter(
+            fixture => {
+
+                const status =
+                    String(
+                        fixture.status ||
+                        ""
+                    ).toLowerCase();
+
+                return (
+                    status === "notstarted" ||
+                    status === "upcoming" ||
+                    status === "1st_half" ||
+                    status === "2nd_half" ||
+                    status === "halftime" ||
+                    status === "extra_time" ||
+                    status === "penalty"
+                );
+            }
         );
 
 
-    container.innerHTML = "";
+    if (
+        availableFixtures.length === 0
+    ) {
+
+        emptySection.style.display =
+            "block";
+
+        emptySection.innerHTML = `
+            <div class="empty-box">
+                <h3>No available matches</h3>
+                <p>
+                    There are no upcoming or
+                    live matches available.
+                </p>
+            </div>
+        `;
+
+        return;
+    }
 
 
-    fixtures.forEach(
+    emptySection.style.display =
+        "none";
+
+
+    availableFixtures.forEach(
         fixture => {
 
             const card =
@@ -246,323 +233,544 @@ function displayFixtures(
                     "div"
                 );
 
-
             card.className =
                 "fixture-card";
 
 
-            const date =
-                new Date(
+            const status =
+                String(
+                    fixture.status ||
+                    "notstarted"
+                ).toLowerCase();
+
+
+            const isLive =
+                status !== "notstarted" &&
+                status !== "upcoming";
+
+
+            const time =
+                formatMatchTime(
                     fixture.date
                 );
 
 
-            const time =
-                date.toLocaleTimeString(
-                    "en-NG",
-                    {
-                        hour: "2-digit",
-                        minute: "2-digit"
-                    }
-                );
+            const statusHTML =
+                isLive
+                    ? `<span class="live-badge">
+                        🔴 LIVE
+                       </span>`
+                    : `<span class="upcoming-badge">
+                        🟢 UPCOMING
+                       </span>`;
 
 
             card.innerHTML = `
 
-                <div class="league-name">
+                <div class="fixture-league">
 
-                    ${escapeHTML(
-                        fixture.league.name
-                    )}
+                    ${
+                        fixture.league?.logo
+                            ? `
+                                <img
+                                    src="${escapeHTML(
+                                        fixture.league.logo
+                                    )}"
+                                    alt=""
+                                    class="league-logo"
+                                    onerror="this.style.display='none'"
+                                >
+                              `
+                            : ""
+                    }
+
+                    <span>
+                        ${escapeHTML(
+                            fixture.league?.name ||
+                            "Unknown League"
+                        )}
+                    </span>
+
+                    <span class="country">
+                        ${
+                            fixture.league?.country
+                                ? escapeHTML(
+                                    fixture.league.country
+                                  )
+                                : ""
+                        }
+                    </span>
 
                 </div>
 
 
-                <div class="teams">
+                <div class="fixture-status">
+                    ${statusHTML}
+                </div>
+
+
+                <div class="fixture-teams">
 
                     <div class="team">
 
-                        ${escapeHTML(
-                            fixture.home.name
-                        )}
+                        ${
+                            fixture.home?.logo
+                                ? `
+                                    <img
+                                        src="${escapeHTML(
+                                            fixture.home.logo
+                                        )}"
+                                        alt=""
+                                        class="team-logo"
+                                        onerror="this.style.display='none'"
+                                    >
+                                  `
+                                : ""
+                        }
+
+                        <span>
+                            ${escapeHTML(
+                                fixture.home?.name ||
+                                "Home Team"
+                            )}
+                        </span>
 
                     </div>
 
 
-                    <div class="vs">
-                        VS
+                    <div class="match-info">
+
+                        <span class="match-time">
+                            ${time}
+                        </span>
+
+                        <span class="vs">
+                            VS
+                        </span>
+
                     </div>
 
 
                     <div class="team">
 
-                        ${escapeHTML(
-                            fixture.away.name
-                        )}
+                        ${
+                            fixture.away?.logo
+                                ? `
+                                    <img
+                                        src="${escapeHTML(
+                                            fixture.away.logo
+                                        )}"
+                                        alt=""
+                                        class="team-logo"
+                                        onerror="this.style.display='none'"
+                                    >
+                                  `
+                                : ""
+                        }
+
+                        <span>
+                            ${escapeHTML(
+                                fixture.away?.name ||
+                                "Away Team"
+                            )}
+                        </span>
 
                     </div>
 
                 </div>
 
 
-                <div class="match-time">
-
-                    ${time}
-
-                </div>
-
-
-                <button
-                    class="analyze-btn"
-                    onclick="analyzeMatch(
-                        ${fixture.id}
-                    )"
-                >
-
-                    Analyze Match
-
-                </button>
+                ${
+                    isLive
+                        ? `
+                            <div class="live-score">
+                                Current Score:
+                                <strong>
+                                    ${fixture.score?.home ?? 0}
+                                    -
+                                    ${fixture.score?.away ?? 0}
+                                </strong>
+                            </div>
+                          `
+                        : `
+                            <button
+                                class="analyze-btn"
+                                onclick="analyzeMatch(${fixture.id})"
+                            >
+                                🔍 Analyze Match
+                            </button>
+                          `
+                }
 
             `;
 
-
-            container.appendChild(
+            fixturesSection.appendChild(
                 card
             );
-
         }
     );
-
 }
 
+
+/* =========================
+   MATCH TIME
+========================= */
+
+function formatMatchTime(dateString) {
+
+    if (!dateString) {
+        return "Time unavailable";
+    }
+
+    const date =
+        new Date(dateString);
+
+    return new Intl.DateTimeFormat(
+        "en-NG",
+        {
+            timeZone:
+                "Africa/Lagos",
+
+            hour:
+                "2-digit",
+
+            minute:
+                "2-digit",
+
+            hour12:
+                true
+        }
+    ).format(date);
+}
+
+
+/* =========================
+   ANALYZE MATCH
+========================= */
 
 async function analyzeMatch(
     fixtureId
 ) {
 
-    const fixtures =
-        document.getElementById(
-            "fixtures"
-        );
-
-    const analysis =
-        document.getElementById(
-            "analysis"
-        );
-
-    const error =
-        document.getElementById(
-            "error"
-        );
-
-
-    error.classList.add(
-        "hidden"
-    );
-
-
-    fixtures.classList.add(
-        "hidden"
-    );
-
-
-    analysis.classList.remove(
-        "hidden"
-    );
-
-
-    document.getElementById(
-        "correctScore"
-    ).textContent =
-        "Analyzing...";
-
-
     try {
+
+        analysisSection.style.display =
+            "block";
+
+        analysisSection.innerHTML = `
+            <div class="analysis-loading">
+                <h3>Analyzing Match...</h3>
+                <p>
+                    Collecting team data and
+                    calculating prediction.
+                </p>
+            </div>
+        `;
 
         const response =
             await fetch(
                 `/api/fixture/${fixtureId}`
             );
 
-
         const data =
             await response.json();
-
 
         if (!data.success) {
 
             throw new Error(
-                data.message
+                data.message ||
+                "Analysis failed."
             );
-
         }
 
+        renderAnalysis(
+            data
+        );
 
-        document.getElementById(
-            "analysisMatch"
-        ).textContent =
-            `${data.match.home} vs ${data.match.away}`;
+        analysisSection.scrollIntoView({
+            behavior: "smooth"
+        });
+
+    } catch (error) {
+
+        console.error(error);
+
+        analysisSection.innerHTML = `
+            <div class="error-box">
+
+                <h3>
+                    Analysis failed
+                </h3>
+
+                <p>
+                    ${escapeHTML(
+                        error.message
+                    )}
+                </p>
+
+                <button
+                    onclick="closeAnalysis()"
+                >
+                    Go Back
+                </button>
+
+            </div>
+        `;
+    }
+}
 
 
-        document.getElementById(
-            "analysisLeague"
-        ).textContent =
-            data.match.league;
+/* =========================
+   RENDER ANALYSIS
+========================= */
+
+function renderAnalysis(data) {
+
+    const model =
+        data.model || {};
+
+    const match =
+        data.match || {};
+
+    const topScores =
+        model.topCorrectScores || [];
 
 
-        document.getElementById(
-            "correctScore"
-        ).textContent =
-            data.model.prediction;
+    analysisSection.innerHTML = `
+
+        <button
+            class="back-btn"
+            onclick="closeAnalysis()"
+        >
+            ← Back to Matches
+        </button>
 
 
-        document.getElementById(
-            "confidence"
-        ).textContent =
-            data.model.confidence;
+        <div class="analysis-header">
+
+            <h2>
+                ${escapeHTML(
+                    match.home ||
+                    "Home"
+                )}
+
+                vs
+
+                ${escapeHTML(
+                    match.away ||
+                    "Away"
+                )}
+            </h2>
+
+            <p>
+                ${escapeHTML(
+                    match.league ||
+                    ""
+                )}
+            </p>
+
+        </div>
 
 
-        document.getElementById(
-            "expectedGoals"
-        ).textContent =
-            `${data.model.expectedGoals.home} - ${data.model.expectedGoals.away}`;
+        <div class="prediction-main">
+
+            <span>
+                Predicted Correct Score
+            </span>
+
+            <strong>
+                ${escapeHTML(
+                    model.prediction ||
+                    "N/A"
+                )}
+            </strong>
+
+            <small>
+                Model confidence:
+                ${escapeHTML(
+                    model.confidence ||
+                    "N/A"
+                )}
+            </small>
+
+        </div>
 
 
-        document.getElementById(
-            "resultProbabilities"
-        ).innerHTML = `
+        <div class="analysis-grid">
+
+            <div class="stat-card">
+
+                <span>
+                    Expected Goals
+                </span>
+
+                <strong>
+                    ${
+                        model.expectedGoals?.home ??
+                        "-"
+                    }
+                    -
+                    ${
+                        model.expectedGoals?.away ??
+                        "-"
+                    }
+                </strong>
+
+            </div>
+
+
+            <div class="stat-card">
+
+                <span>
+                    Predicted Winner
+                </span>
+
+                <strong>
+                    ${escapeHTML(
+                        model.predictedWinner ||
+                        "N/A"
+                    )}
+                </strong>
+
+            </div>
+
+        </div>
+
+
+        <div class="probability-box">
+
+            <h3>
+                Result Probabilities
+            </h3>
 
             <div>
                 Home:
-                ${data.model.resultProbabilities.homeWin}
+                ${
+                    model.resultProbabilities?.homeWin ||
+                    "N/A"
+                }
             </div>
 
             <div>
                 Draw:
-                ${data.model.resultProbabilities.draw}
+                ${
+                    model.resultProbabilities?.draw ||
+                    "N/A"
+                }
             </div>
 
             <div>
                 Away:
-                ${data.model.resultProbabilities.awayWin}
+                ${
+                    model.resultProbabilities?.awayWin ||
+                    "N/A"
+                }
             </div>
 
-        `;
+        </div>
 
 
-        const scores =
-            document.getElementById(
-                "scores"
-            );
+        <div class="scores-box">
 
+            <h3>
+                Top Correct Scores
+            </h3>
 
-        scores.innerHTML = "";
+            ${
+                topScores.length
+                    ? topScores.map(
+                        score => `
+                            <div class="score-row">
 
+                                <span>
+                                    ${escapeHTML(
+                                        score.score
+                                    )}
+                                </span>
 
-        data.model.topCorrectScores
-            .forEach(
-                item => {
+                                <strong>
+                                    ${escapeHTML(
+                                        score.probability
+                                    )}
+                                </strong>
 
-                    const row =
-                        document.createElement(
-                            "div"
-                        );
+                            </div>
+                        `
+                      ).join("")
+                    : `
+                        <p>
+                            No score predictions
+                            available.
+                        </p>
+                      `
+            }
 
+        </div>
 
-                    row.className =
-                        "score-row";
-
-
-                    row.innerHTML = `
-
-                        <strong>
-                            ${item.score}
-                        </strong>
-
-                        <span>
-                            ${item.probability}
-                        </span>
-
-                    `;
-
-
-                    scores.appendChild(
-                        row
-                    );
-
-                }
-            );
-
-
-    } catch (err) {
-
-        analysis.classList.add(
-            "hidden"
-        );
-
-        fixtures.classList.remove(
-            "hidden"
-        );
-
-
-        error.textContent =
-            err.message ||
-            "Unable to analyze match.";
-
-        error.classList.remove(
-            "hidden"
-        );
-
-    }
-
+    `;
 }
 
+
+/* =========================
+   CLOSE ANALYSIS
+========================= */
 
 function closeAnalysis() {
 
-    document.getElementById(
-        "analysis"
-    ).classList.add(
-        "hidden"
-    );
+    analysisSection.style.display =
+        "none";
 
-
-    document.getElementById(
-        "fixtures"
-    ).classList.remove(
-        "hidden"
-    );
-
+    window.scrollTo({
+        top: 0,
+        behavior: "smooth"
+    });
 }
 
 
-function escapeHTML(
-    value
-) {
+/* =========================
+   REFRESH
+========================= */
 
-    return String(value)
-        .replace(
-            /&/g,
-            "&amp;"
-        )
-        .replace(
-            /</g,
-            "&lt;"
-        )
-        .replace(
-            />/g,
-            "&gt;"
-        )
-        .replace(
-            /"/g,
-            "&quot;"
-        )
-        .replace(
-            /'/g,
-            "&#039;"
-        );
+function refreshFixtures() {
 
+    loadFixtures();
 }
 
+
+/* =========================
+   SECURITY
+========================= */
+
+function escapeHTML(value) {
+
+    return String(
+        value ?? ""
+    )
+    .replace(
+        /&/g,
+        "&amp;"
+    )
+    .replace(
+        /</g,
+        "&lt;"
+    )
+    .replace(
+        />/g,
+        "&gt;"
+    )
+    .replace(
+        /"/g,
+        "&quot;"
+    )
+    .replace(
+        /'/g,
+        "&#039;"
+    );
+}
+
+
+/* =========================
+   START APP
+========================= */
 
 loadFixtures();
