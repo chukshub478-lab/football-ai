@@ -106,7 +106,224 @@ async function bzzoiroAPI(endpoint) {
 
 /*
 ========================================
-BZZOIRO TEST
+GET TODAY'S FIXTURES
+========================================
+*/
+
+app.get(
+    "/api/fixtures",
+    async (req, res) => {
+
+        try {
+
+            let date = req.query.date;
+
+            /*
+            Use today's date in Nigeria
+            if no date is supplied.
+            */
+
+            if (!date) {
+
+                const formatter =
+                    new Intl.DateTimeFormat(
+                        "en-CA",
+                        {
+                            timeZone:
+                                "Africa/Lagos",
+
+                            year:
+                                "numeric",
+
+                            month:
+                                "2-digit",
+
+                            day:
+                                "2-digit"
+                        }
+                    );
+
+                date =
+                    formatter.format(
+                        new Date()
+                    );
+
+            }
+
+            /*
+            Bzzoiro expects:
+            date_from=YYYY-MM-DD
+            date_to=YYYY-MM-DD
+            */
+
+            const endpoint =
+                `/events/?date_from=${date}&date_to=${date}&limit=200`;
+
+            const data =
+                await bzzoiroAPI(
+                    endpoint
+                );
+
+            /*
+            Convert Bzzoiro's response
+            into the structure our
+            frontend already understands.
+            */
+
+            const fixtures =
+                (data.results || [])
+                    .map(item => {
+
+                        const homeTeam =
+                            item.home_team || {};
+
+                        const awayTeam =
+                            item.away_team || {};
+
+                        const league =
+                            item.league || {};
+
+                        return {
+
+                            id:
+                                item.id,
+
+                            date:
+                                item.event_date ||
+                                item.start_time ||
+                                item.date ||
+                                null,
+
+                            status:
+                                item.status ||
+                                "upcoming",
+
+                            league: {
+
+                                id:
+                                    league.id ||
+                                    item.league_id ||
+                                    null,
+
+                                name:
+                                    league.name ||
+                                    "Unknown League",
+
+                                country:
+                                    league.country ||
+                                    null,
+
+                                logo:
+                                    league.id
+                                        ? `${BZZOIRO_URL.replace(
+                                            "/api/v2",
+                                            ""
+                                          )}/img/league/${league.id}/`
+                                        : null
+
+                            },
+
+                            home: {
+
+                                id:
+                                    homeTeam.id ||
+                                    item.home_team_id ||
+                                    null,
+
+                                name:
+                                    homeTeam.name ||
+                                    "Home Team",
+
+                                logo:
+                                    homeTeam.id
+                                        ? `${BZZOIRO_URL.replace(
+                                            "/api/v2",
+                                            ""
+                                          )}/img/team/${homeTeam.id}/`
+                                        : null
+
+                            },
+
+                            away: {
+
+                                id:
+                                    awayTeam.id ||
+                                    item.away_team_id ||
+                                    null,
+
+                                name:
+                                    awayTeam.name ||
+                                    "Away Team",
+
+                                logo:
+                                    awayTeam.id
+                                        ? `${BZZOIRO_URL.replace(
+                                            "/api/v2",
+                                            ""
+                                          )}/img/team/${awayTeam.id}/`
+                                        : null
+
+                            },
+
+                            score: {
+
+                                home:
+                                    item.home_score ??
+                                    null,
+
+                                away:
+                                    item.away_score ??
+                                    null
+
+                            }
+
+                        };
+
+                    });
+
+            res.json({
+
+                success:
+                    true,
+
+                provider:
+                    "Bzzoiro Sports Data",
+
+                date,
+
+                count:
+                    fixtures.length,
+
+                fixtures
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Fixtures error:",
+                error
+            );
+
+            res.status(500).json({
+
+                success:
+                    false,
+
+                message:
+                    error.message
+
+            });
+
+        }
+
+    }
+);
+
+
+/*
+========================================
+BZZOIRO CONNECTION TEST
 ========================================
 */
 
@@ -123,7 +340,8 @@ app.get(
 
             res.json({
 
-                success: true,
+                success:
+                    true,
 
                 provider:
                     "Bzzoiro Sports Data",
@@ -148,7 +366,8 @@ app.get(
 
             res.status(500).json({
 
-                success: false,
+                success:
+                    false,
 
                 provider:
                     "Bzzoiro Sports Data",
@@ -176,13 +395,16 @@ app.get(
 
         res.json({
 
-            success: true,
+            success:
+                true,
 
             message:
                 "Football AI backend is running",
 
             bzzoiroConfigured:
-                Boolean(BZZOIRO_API_KEY)
+                Boolean(
+                    BZZOIRO_API_KEY
+                )
 
         });
 
