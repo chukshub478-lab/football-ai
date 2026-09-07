@@ -12,68 +12,54 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const PORT = Number(process.env.PORT) || 10000;
 
-const BZZOIRO_API_KEY =
-    process.env.BZZOIRO_API_KEY;
+const BZZOIRO_API_KEY = process.env.BZZOIRO_API_KEY;
 
-const BZZOIRO_URL =
-    "https://sports.bzzoiro.com/api/v2";
+const BZZOIRO_URL = "https://sports.bzzoiro.com/api/v2";
+
+const IMAGE_URL = "https://sports.bzzoiro.com/img";
 
 const cache = new Map();
 
 const CACHE_TIME = 10 * 60 * 1000;
 
 
-/*
-========================================
-BZZOIRO API HELPER
-========================================
-*/
+/* =========================
+   BZZOIRO API HELPER
+========================= */
 
 async function bzzoiroAPI(endpoint) {
 
     if (!BZZOIRO_API_KEY) {
-
-        throw new Error(
-            "BZZOIRO_API_KEY is missing."
-        );
-
+        throw new Error("BZZOIRO_API_KEY is missing.");
     }
 
-    const cached =
-        cache.get(endpoint);
+    const cached = cache.get(endpoint);
 
     if (
         cached &&
-        Date.now() - cached.time <
-        CACHE_TIME
+        Date.now() - cached.time < CACHE_TIME
     ) {
-
         return cached.data;
-
     }
 
-    const response =
-        await fetch(
-            `${BZZOIRO_URL}${endpoint}`,
-            {
-                headers: {
+    const response = await fetch(
+        `${BZZOIRO_URL}${endpoint}`,
+        {
+            headers: {
+                "Authorization":
+                    `Token ${BZZOIRO_API_KEY}`,
 
-                    "Authorization":
-                        `Token ${BZZOIRO_API_KEY}`,
-
-                    "Accept":
-                        "application/json"
-
-                }
+                "Accept":
+                    "application/json"
             }
-        );
+        }
+    );
 
     let data;
 
     try {
 
-        data =
-            await response.json();
+        data = await response.json();
 
     } catch {
 
@@ -100,15 +86,105 @@ async function bzzoiroAPI(endpoint) {
     );
 
     return data;
-
 }
 
 
-/*
-========================================
-GET TODAY'S FIXTURES
-========================================
-*/
+/* =========================
+   TEAM DETAILS
+========================= */
+
+async function getTeam(teamId) {
+
+    if (!teamId) {
+        return null;
+    }
+
+    try {
+
+        const data =
+            await bzzoiroAPI(
+                `/teams/${teamId}/`
+            );
+
+        return data;
+
+    } catch (error) {
+
+        console.error(
+            `Team ${teamId} error:`,
+            error.message
+        );
+
+        return null;
+    }
+}
+
+
+/* =========================
+   LEAGUE DETAILS
+========================= */
+
+async function getLeague(leagueId) {
+
+    if (!leagueId) {
+        return null;
+    }
+
+    try {
+
+        const data =
+            await bzzoiroAPI(
+                `/leagues/${leagueId}/`
+            );
+
+        return data;
+
+    } catch (error) {
+
+        console.error(
+            `League ${leagueId} error:`,
+            error.message
+        );
+
+        return null;
+    }
+}
+
+
+/* =========================
+   EVENT DETAILS
+========================= */
+
+async function getEvent(eventId) {
+
+    if (!eventId) {
+        return null;
+    }
+
+    try {
+
+        const data =
+            await bzzoiroAPI(
+                `/events/${eventId}/`
+            );
+
+        return data;
+
+    } catch (error) {
+
+        console.error(
+            `Event ${eventId} error:`,
+            error.message
+        );
+
+        return null;
+    }
+}
+
+
+/* =========================
+   TODAY'S FIXTURES
+========================= */
 
 app.get(
     "/api/fixtures",
@@ -116,12 +192,8 @@ app.get(
 
         try {
 
-            let date = req.query.date;
-
-            /*
-            Use today's date in Nigeria
-            if no date is supplied.
-            */
+            let date =
+                req.query.date;
 
             if (!date) {
 
@@ -147,14 +219,10 @@ app.get(
                     formatter.format(
                         new Date()
                     );
-
             }
 
-            /*
-            Bzzoiro expects:
-            date_from=YYYY-MM-DD
-            date_to=YYYY-MM-DD
-            */
+
+            /* Get fixtures for selected date */
 
             const endpoint =
                 `/events/?date_from=${date}&date_to=${date}&limit=200`;
@@ -164,122 +232,218 @@ app.get(
                     endpoint
                 );
 
-            /*
-            Convert Bzzoiro's response
-            into the structure our
-            frontend already understands.
-            */
+            const rawFixtures =
+                data.results || [];
+
+
+            /* Enrich fixtures */
 
             const fixtures =
-                (data.results || [])
-                    .map(item => {
+                await Promise.all(
 
-                        const homeTeam =
-                            item.home_team || {};
+                    rawFixtures.map(
+                        async (item) => {
 
-                        const awayTeam =
-                            item.away_team || {};
+                            let eventDetail =
+                                null;
 
-                        const league =
-                            item.league || {};
+                            let homeTeam =
+                                item.home_team || null;
 
-                        return {
+                            let awayTeam =
+                                item.away_team || null;
 
-                            id:
-                                item.id,
+                            let league =
+                                item.league || null;
 
-                            date:
-                                item.event_date ||
-                                item.start_time ||
-                                item.date ||
-                                null,
 
-                            status:
-                                item.status ||
-                                "upcoming",
+                            /*
+                             * If the list endpoint
+                             * does not provide names,
+                             * get the full event.
+                             */
 
-                            league: {
+                            if (
+                                !homeTeam?.name ||
+                                !awayTeam?.name ||
+                                !league?.name
+                            ) {
 
-                                id:
-                                    league.id ||
-                                    item.league_id ||
-                                    null,
+                                eventDetail =
+                                    await getEvent(
+                                        item.id
+                                    );
 
-                                name:
-                                    league.name ||
-                                    "Unknown League",
+                                if (
+                                    eventDetail
+                                ) {
 
-                                country:
-                                    league.country ||
-                                    null,
+                                    homeTeam =
+                                        eventDetail.home_team ||
+                                        homeTeam;
 
-                                logo:
-                                    league.id
-                                        ? `${BZZOIRO_URL.replace(
-                                            "/api/v2",
-                                            ""
-                                          )}/img/league/${league.id}/`
-                                        : null
+                                    awayTeam =
+                                        eventDetail.away_team ||
+                                        awayTeam;
 
-                            },
-
-                            home: {
-
-                                id:
-                                    homeTeam.id ||
-                                    item.home_team_id ||
-                                    null,
-
-                                name:
-                                    homeTeam.name ||
-                                    "Home Team",
-
-                                logo:
-                                    homeTeam.id
-                                        ? `${BZZOIRO_URL.replace(
-                                            "/api/v2",
-                                            ""
-                                          )}/img/team/${homeTeam.id}/`
-                                        : null
-
-                            },
-
-                            away: {
-
-                                id:
-                                    awayTeam.id ||
-                                    item.away_team_id ||
-                                    null,
-
-                                name:
-                                    awayTeam.name ||
-                                    "Away Team",
-
-                                logo:
-                                    awayTeam.id
-                                        ? `${BZZOIRO_URL.replace(
-                                            "/api/v2",
-                                            ""
-                                          )}/img/team/${awayTeam.id}/`
-                                        : null
-
-                            },
-
-                            score: {
-
-                                home:
-                                    item.home_score ??
-                                    null,
-
-                                away:
-                                    item.away_score ??
-                                    null
-
+                                    league =
+                                        eventDetail.league ||
+                                        league;
+                                }
                             }
 
-                        };
 
-                    });
+                            /*
+                             * If team names are
+                             * still missing,
+                             * get team details.
+                             */
+
+                            if (
+                                !homeTeam?.name &&
+                                item.home_team_id
+                            ) {
+
+                                homeTeam =
+                                    await getTeam(
+                                        item.home_team_id
+                                    );
+                            }
+
+
+                            if (
+                                !awayTeam?.name &&
+                                item.away_team_id
+                            ) {
+
+                                awayTeam =
+                                    await getTeam(
+                                        item.away_team_id
+                                    );
+                            }
+
+
+                            /*
+                             * If league name is
+                             * still missing,
+                             * get league details.
+                             */
+
+                            if (
+                                !league?.name &&
+                                item.league_id
+                            ) {
+
+                                league =
+                                    await getLeague(
+                                        item.league_id
+                                    );
+                            }
+
+
+                            const homeId =
+                                homeTeam?.id ||
+                                item.home_team_id ||
+                                null;
+
+                            const awayId =
+                                awayTeam?.id ||
+                                item.away_team_id ||
+                                null;
+
+                            const leagueId =
+                                league?.id ||
+                                item.league_id ||
+                                null;
+
+
+                            return {
+
+                                id:
+                                    item.id,
+
+                                date:
+                                    item.event_date ||
+                                    item.start_time ||
+                                    item.date ||
+                                    null,
+
+                                status:
+                                    item.status ||
+                                    "notstarted",
+
+
+                                league: {
+
+                                    id:
+                                        leagueId,
+
+                                    name:
+                                        league?.name ||
+                                        "Unknown League",
+
+                                    country:
+                                        league?.country ||
+                                        league?.country_name ||
+                                        null,
+
+                                    logo:
+                                        leagueId
+                                            ? `${IMAGE_URL}/league/${leagueId}/`
+                                            : null
+                                },
+
+
+                                home: {
+
+                                    id:
+                                        homeId,
+
+                                    name:
+                                        homeTeam?.name ||
+                                        "Home Team",
+
+                                    logo:
+                                        homeId
+                                            ? `${IMAGE_URL}/team/${homeId}/`
+                                            : null
+                                },
+
+
+                                away: {
+
+                                    id:
+                                        awayId,
+
+                                    name:
+                                        awayTeam?.name ||
+                                        "Away Team",
+
+                                    logo:
+                                        awayId
+                                            ? `${IMAGE_URL}/team/${awayId}/`
+                                            : null
+                                },
+
+
+                                score: {
+
+                                    home:
+                                        item.home_score ??
+                                        null,
+
+                                    away:
+                                        item.away_score ??
+                                        null
+                                }
+
+                            };
+
+                        }
+                    )
+
+                );
+
 
             res.json({
 
@@ -321,11 +485,9 @@ app.get(
 );
 
 
-/*
-========================================
-BZZOIRO CONNECTION TEST
-========================================
-*/
+/* =========================
+   BZZOIRO CONNECTION TEST
+========================= */
 
 app.get(
     "/api/bzzoiro-test",
@@ -383,11 +545,9 @@ app.get(
 );
 
 
-/*
-========================================
-HEALTH CHECK
-========================================
-*/
+/* =========================
+   HEALTH CHECK
+========================= */
 
 app.get(
     "/api/health",
@@ -412,30 +572,29 @@ app.get(
 );
 
 
-/*
-========================================
-FRONTEND
-========================================
-*/
+/* =========================
+   FRONTEND
+========================= */
 
-app.get("*", (req, res) => {
+app.get(
+    "*",
+    (req, res) => {
 
-    res.sendFile(
-        path.join(
-            __dirname,
-            "public",
-            "index.html"
-        )
-    );
+        res.sendFile(
+            path.join(
+                __dirname,
+                "public",
+                "index.html"
+            )
+        );
 
-});
+    }
+);
 
 
-/*
-========================================
-START SERVER
-========================================
-*/
+/* =========================
+   START SERVER
+========================= */
 
 app.listen(
     PORT,
