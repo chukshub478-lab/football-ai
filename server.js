@@ -101,12 +101,9 @@ async function getTeam(teamId) {
 
     try {
 
-        const data =
-            await bzzoiroAPI(
-                `/teams/${teamId}/`
-            );
-
-        return data;
+        return await bzzoiroAPI(
+            `/teams/${teamId}/`
+        );
 
     } catch (error) {
 
@@ -132,12 +129,9 @@ async function getLeague(leagueId) {
 
     try {
 
-        const data =
-            await bzzoiroAPI(
-                `/leagues/${leagueId}/`
-            );
-
-        return data;
+        return await bzzoiroAPI(
+            `/leagues/${leagueId}/`
+        );
 
     } catch (error) {
 
@@ -163,17 +157,48 @@ async function getEvent(eventId) {
 
     try {
 
-        const data =
-            await bzzoiroAPI(
-                `/events/${eventId}/`
-            );
-
-        return data;
+        return await bzzoiroAPI(
+            `/events/${eventId}/`
+        );
 
     } catch (error) {
 
         console.error(
             `Event ${eventId} error:`,
+            error.message
+        );
+
+        return null;
+    }
+}
+
+
+/* =========================
+   EVENT DATA HELPERS
+========================= */
+
+/*
+ * These endpoints are requested separately.
+ *
+ * If one particular endpoint is unavailable
+ * for a fixture, the analysis still continues.
+ */
+
+async function getEventResource(
+    eventId,
+    resource
+) {
+
+    try {
+
+        return await bzzoiroAPI(
+            `/events/${eventId}/${resource}/`
+        );
+
+    } catch (error) {
+
+        console.error(
+            `Event ${eventId} ${resource} error:`,
             error.message
         );
 
@@ -259,26 +284,9 @@ app.get(
 
         try {
 
-            /*
-             * Use the requested date if supplied.
-             * Otherwise use today's date in Nigeria.
-             */
-
             const nigeriaDate =
                 req.query.date ||
                 getNigeriaDate();
-
-
-            /*
-             * Nigeria is UTC+1.
-             *
-             * We request both the UTC date that
-             * contains the beginning of the Nigerian
-             * day and the following UTC date.
-             *
-             * This prevents matches around midnight
-             * from being missed.
-             */
 
             const selectedDate =
                 new Date(
@@ -291,7 +299,6 @@ app.get(
                     24 * 60 * 60 * 1000
                 );
 
-
             const utcFrom =
                 selectedDate
                     .toISOString()
@@ -301,11 +308,6 @@ app.get(
                 nextDate
                     .toISOString()
                     .slice(0, 10);
-
-
-            /*
-             * Request the UTC date range from Bzzoiro.
-             */
 
             const endpoint =
                 `/events/?date_from=${utcFrom}&date_to=${utcTo}&limit=200`;
@@ -318,19 +320,13 @@ app.get(
             const rawFixtures =
                 data.results || [];
 
-
-            /*
-             * Enrich fixtures.
-             */
-
             const fixtures =
                 await Promise.all(
 
                     rawFixtures.map(
                         async (item) => {
 
-                            let eventDetail =
-                                null;
+                            let eventDetail = null;
 
                             let homeTeam =
                                 typeof item.home_team === "object"
@@ -347,14 +343,6 @@ app.get(
                                     ? item.league
                                     : null;
 
-
-                            /*
-                             * Some Bzzoiro responses
-                             * return only IDs or strings.
-                             *
-                             * Get the full event when
-                             * required.
-                             */
 
                             if (
                                 !homeTeam?.name ||
@@ -386,11 +374,6 @@ app.get(
                             }
 
 
-                            /*
-                             * Get home team details
-                             * if the name is still missing.
-                             */
-
                             if (
                                 !homeTeam?.name &&
                                 item.home_team_id
@@ -403,11 +386,6 @@ app.get(
                             }
 
 
-                            /*
-                             * Get away team details
-                             * if the name is still missing.
-                             */
-
                             if (
                                 !awayTeam?.name &&
                                 item.away_team_id
@@ -419,11 +397,6 @@ app.get(
                                     );
                             }
 
-
-                            /*
-                             * Get league details
-                             * if the name is still missing.
-                             */
 
                             if (
                                 !league?.name &&
@@ -452,18 +425,11 @@ app.get(
                                 item.league_id ||
                                 null;
 
-
                             const matchDate =
                                 item.event_date ||
                                 item.start_time ||
                                 item.date ||
                                 null;
-
-
-                            /*
-                             * Convert match time to
-                             * the Nigerian calendar date.
-                             */
 
                             const nigeriaMatchDate =
                                 getNigeriaMatchDate(
@@ -486,7 +452,6 @@ app.get(
                                     item.status ||
                                     "notstarted",
 
-
                                 league: {
 
                                     id:
@@ -507,7 +472,6 @@ app.get(
                                             : null
                                 },
 
-
                                 home: {
 
                                     id:
@@ -523,7 +487,6 @@ app.get(
                                             : null
                                 },
 
-
                                 away: {
 
                                     id:
@@ -538,7 +501,6 @@ app.get(
                                             ? `${IMAGE_URL}/team/${awayId}/`
                                             : null
                                 },
-
 
                                 score: {
 
@@ -559,11 +521,6 @@ app.get(
                 );
 
 
-            /*
-             * Only keep matches that belong
-             * to the selected Nigerian date.
-             */
-
             const filteredFixtures =
                 fixtures.filter(
                     (fixture) =>
@@ -571,10 +528,6 @@ app.get(
                         nigeriaDate
                 );
 
-
-            /*
-             * Sort matches by kickoff time.
-             */
 
             filteredFixtures.sort(
                 (a, b) => {
@@ -644,6 +597,302 @@ app.get(
 
 
 /* =========================
+   MATCH ANALYSIS
+========================= */
+
+app.get(
+    "/api/fixture/:id",
+    async (req, res) => {
+
+        try {
+
+            const fixtureId =
+                Number(
+                    req.params.id
+                );
+
+            if (
+                !Number.isInteger(
+                    fixtureId
+                )
+            ) {
+
+                return res.status(400).json({
+
+                    success:
+                        false,
+
+                    message:
+                        "Invalid fixture ID."
+
+                });
+
+            }
+
+
+            /*
+             * Main match information
+             */
+
+            const event =
+                await getEvent(
+                    fixtureId
+                );
+
+
+            if (!event) {
+
+                return res.status(404).json({
+
+                    success:
+                        false,
+
+                    message:
+                        "Match not found."
+
+                });
+
+            }
+
+
+            /*
+             * Get additional match resources.
+             *
+             * Promise.all allows the requests
+             * to run at the same time.
+             */
+
+            const [
+                stats,
+                h2h,
+                odds,
+                prediction,
+                lineups,
+                incidents,
+                shotmap
+            ] = await Promise.all([
+
+                getEventResource(
+                    fixtureId,
+                    "stats"
+                ),
+
+                getEventResource(
+                    fixtureId,
+                    "h2h"
+                ),
+
+                getEventResource(
+                    fixtureId,
+                    "odds"
+                ),
+
+                getEventResource(
+                    fixtureId,
+                    "prediction"
+                ),
+
+                getEventResource(
+                    fixtureId,
+                    "lineups"
+                ),
+
+                getEventResource(
+                    fixtureId,
+                    "incidents"
+                ),
+
+                getEventResource(
+                    fixtureId,
+                    "shotmap"
+                )
+
+            ]);
+
+
+            /*
+             * Extract teams.
+             */
+
+            const homeTeam =
+                event.home_team ||
+                null;
+
+            const awayTeam =
+                event.away_team ||
+                null;
+
+
+            /*
+             * Team fixture history.
+             */
+
+            let homeFixtures = null;
+
+            let awayFixtures = null;
+
+
+            if (
+                homeTeam?.id
+            ) {
+
+                homeFixtures =
+                    await getTeamFixtures(
+                        homeTeam.id
+                    );
+
+            }
+
+
+            if (
+                awayTeam?.id
+            ) {
+
+                awayFixtures =
+                    await getTeamFixtures(
+                        awayTeam.id
+                    );
+
+            }
+
+
+            /*
+             * Build a clean response.
+             */
+
+            res.json({
+
+                success:
+                    true,
+
+                provider:
+                    "Bzzoiro Sports Data",
+
+                fixture: {
+
+                    id:
+                        event.id,
+
+                    date:
+                        event.event_date ||
+                        null,
+
+                    status:
+                        event.status ||
+                        null,
+
+                    league:
+                        event.league ||
+                        null,
+
+                    home:
+                        homeTeam,
+
+                    away:
+                        awayTeam,
+
+                    score: {
+
+                        home:
+                            event.home_score ??
+                            null,
+
+                        away:
+                            event.away_score ??
+                            null
+
+                    }
+
+                },
+
+                statistics:
+                    stats,
+
+                h2h:
+                    h2h,
+
+                odds:
+                    odds,
+
+                prediction:
+                    prediction,
+
+                lineups:
+                    lineups,
+
+                incidents:
+                    incidents,
+
+                shotmap:
+                    shotmap,
+
+                team_form: {
+
+                    home:
+                        homeFixtures,
+
+                    away:
+                        awayFixtures
+
+                }
+
+            });
+
+        } catch (error) {
+
+            console.error(
+                "Match analysis error:",
+                error
+            );
+
+            res.status(500).json({
+
+                success:
+                    false,
+
+                message:
+                    error.message
+
+            });
+
+        }
+
+    }
+);
+
+
+/* =========================
+   TEAM FIXTURES
+========================= */
+
+async function getTeamFixtures(
+    teamId
+) {
+
+    if (!teamId) {
+        return null;
+    }
+
+    try {
+
+        return await bzzoiroAPI(
+            `/teams/${teamId}/fixtures/`
+        );
+
+    } catch (error) {
+
+        console.error(
+            `Team fixtures ${teamId} error:`,
+            error.message
+        );
+
+        return null;
+    }
+
+}
+
+
+/* =========================
    BZZOIRO CONNECTION TEST
 ========================= */
 
@@ -680,108 +929,4 @@ app.get(
         } catch (error) {
 
             console.error(
-                "Bzzoiro test error:",
-                error
-            );
-
-            res.status(500).json({
-
-                success:
-                    false,
-
-                provider:
-                    "Bzzoiro Sports Data",
-
-                message:
-                    error.message
-
-            });
-
-        }
-
-    }
-);
-
-
-/* =========================
-   HEALTH CHECK
-========================= */
-
-app.get(
-    "/api/health",
-    (req, res) => {
-
-        res.json({
-
-            success:
-                true,
-
-            message:
-                "Football AI backend is running",
-
-            bzzoiroConfigured:
-                Boolean(
-                    BZZOIRO_API_KEY
-                )
-
-        });
-
-    }
-);
-
-
-/* =========================
-   FRONTEND
-========================= */
-
-app.get(
-    "*",
-    (req, res) => {
-
-        res.sendFile(
-            path.join(
-                __dirname,
-                "public",
-                "index.html"
-            )
-        );
-
-    }
-);
-
-
-/* =========================
-   START SERVER
-========================= */
-
-app.listen(
-    PORT,
-    "0.0.0.0",
-    () => {
-
-        console.log(
-            "================================"
-        );
-
-        console.log(
-            "Football AI server started"
-        );
-
-        console.log(
-            `PORT: ${PORT}`
-        );
-
-        console.log(
-            `BZZOIRO API KEY: ${
-                BZZOIRO_API_KEY
-                    ? "Configured"
-                    : "Missing"
-            }`
-        );
-
-        console.log(
-            "================================"
-        );
-
-    }
-);
+                "Bzzoir
