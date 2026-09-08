@@ -183,6 +183,73 @@ async function getEvent(eventId) {
 
 
 /* =========================
+   NIGERIA DATE HELPER
+========================= */
+
+function getNigeriaDate() {
+
+    const formatter =
+        new Intl.DateTimeFormat(
+            "en-CA",
+            {
+                timeZone:
+                    "Africa/Lagos",
+
+                year:
+                    "numeric",
+
+                month:
+                    "2-digit",
+
+                day:
+                    "2-digit"
+            }
+        );
+
+    return formatter.format(
+        new Date()
+    );
+}
+
+
+/* =========================
+   CONVERT UTC TO NIGERIA DATE
+========================= */
+
+function getNigeriaMatchDate(matchDate) {
+
+    if (!matchDate) {
+        return null;
+    }
+
+    const dateObject =
+        new Date(matchDate);
+
+    const formatter =
+        new Intl.DateTimeFormat(
+            "en-CA",
+            {
+                timeZone:
+                    "Africa/Lagos",
+
+                year:
+                    "numeric",
+
+                month:
+                    "2-digit",
+
+                day:
+                    "2-digit"
+            }
+        );
+
+    return formatter.format(
+        dateObject
+    );
+}
+
+
+/* =========================
    TODAY'S FIXTURES
 ========================= */
 
@@ -192,40 +259,56 @@ app.get(
 
         try {
 
-            let date =
-                req.query.date;
+            /*
+             * Use the requested date if supplied.
+             * Otherwise use today's date in Nigeria.
+             */
 
-            if (!date) {
-
-                const formatter =
-                    new Intl.DateTimeFormat(
-                        "en-CA",
-                        {
-                            timeZone:
-                                "Africa/Lagos",
-
-                            year:
-                                "numeric",
-
-                            month:
-                                "2-digit",
-
-                            day:
-                                "2-digit"
-                        }
-                    );
-
-                date =
-                    formatter.format(
-                        new Date()
-                    );
-            }
+            const nigeriaDate =
+                req.query.date ||
+                getNigeriaDate();
 
 
-            /* Get fixtures for selected date */
+            /*
+             * Nigeria is UTC+1.
+             *
+             * We request both the UTC date that
+             * contains the beginning of the Nigerian
+             * day and the following UTC date.
+             *
+             * This prevents matches around midnight
+             * from being missed.
+             */
+
+            const selectedDate =
+                new Date(
+                    `${nigeriaDate}T00:00:00+01:00`
+                );
+
+            const nextDate =
+                new Date(
+                    selectedDate.getTime() +
+                    24 * 60 * 60 * 1000
+                );
+
+
+            const utcFrom =
+                selectedDate
+                    .toISOString()
+                    .slice(0, 10);
+
+            const utcTo =
+                nextDate
+                    .toISOString()
+                    .slice(0, 10);
+
+
+            /*
+             * Request the UTC date range from Bzzoiro.
+             */
 
             const endpoint =
-                `/events/?date_from=${date}&date_to=${date}&limit=200`;
+                `/events/?date_from=${utcFrom}&date_to=${utcTo}&limit=200`;
 
             const data =
                 await bzzoiroAPI(
@@ -236,7 +319,9 @@ app.get(
                 data.results || [];
 
 
-            /* Enrich fixtures */
+            /*
+             * Enrich fixtures.
+             */
 
             const fixtures =
                 await Promise.all(
@@ -248,19 +333,27 @@ app.get(
                                 null;
 
                             let homeTeam =
-                                item.home_team || null;
+                                typeof item.home_team === "object"
+                                    ? item.home_team
+                                    : null;
 
                             let awayTeam =
-                                item.away_team || null;
+                                typeof item.away_team === "object"
+                                    ? item.away_team
+                                    : null;
 
                             let league =
-                                item.league || null;
+                                typeof item.league === "object"
+                                    ? item.league
+                                    : null;
 
 
                             /*
-                             * If the list endpoint
-                             * does not provide names,
-                             * get the full event.
+                             * Some Bzzoiro responses
+                             * return only IDs or strings.
+                             *
+                             * Get the full event when
+                             * required.
                              */
 
                             if (
@@ -294,9 +387,8 @@ app.get(
 
 
                             /*
-                             * If team names are
-                             * still missing,
-                             * get team details.
+                             * Get home team details
+                             * if the name is still missing.
                              */
 
                             if (
@@ -311,6 +403,11 @@ app.get(
                             }
 
 
+                            /*
+                             * Get away team details
+                             * if the name is still missing.
+                             */
+
                             if (
                                 !awayTeam?.name &&
                                 item.away_team_id
@@ -324,9 +421,8 @@ app.get(
 
 
                             /*
-                             * If league name is
-                             * still missing,
-                             * get league details.
+                             * Get league details
+                             * if the name is still missing.
                              */
 
                             if (
@@ -357,16 +453,34 @@ app.get(
                                 null;
 
 
+                            const matchDate =
+                                item.event_date ||
+                                item.start_time ||
+                                item.date ||
+                                null;
+
+
+                            /*
+                             * Convert match time to
+                             * the Nigerian calendar date.
+                             */
+
+                            const nigeriaMatchDate =
+                                getNigeriaMatchDate(
+                                    matchDate
+                                );
+
+
                             return {
 
                                 id:
                                     item.id,
 
                                 date:
-                                    item.event_date ||
-                                    item.start_time ||
-                                    item.date ||
-                                    null,
+                                    matchDate,
+
+                                nigeriaDate:
+                                    nigeriaMatchDate,
 
                                 status:
                                     item.status ||
@@ -445,6 +559,45 @@ app.get(
                 );
 
 
+            /*
+             * Only keep matches that belong
+             * to the selected Nigerian date.
+             */
+
+            const filteredFixtures =
+                fixtures.filter(
+                    (fixture) =>
+                        fixture.nigeriaDate ===
+                        nigeriaDate
+                );
+
+
+            /*
+             * Sort matches by kickoff time.
+             */
+
+            filteredFixtures.sort(
+                (a, b) => {
+
+                    const dateA =
+                        new Date(
+                            a.date || 0
+                        );
+
+                    const dateB =
+                        new Date(
+                            b.date || 0
+                        );
+
+                    return (
+                        dateA.getTime() -
+                        dateB.getTime()
+                    );
+
+                }
+            );
+
+
             res.json({
 
                 success:
@@ -453,12 +606,17 @@ app.get(
                 provider:
                     "Bzzoiro Sports Data",
 
-                date,
+                date:
+                    nigeriaDate,
+
+                timezone:
+                    "Africa/Lagos",
 
                 count:
-                    fixtures.length,
+                    filteredFixtures.length,
 
-                fixtures
+                fixtures:
+                    filteredFixtures
 
             });
 
