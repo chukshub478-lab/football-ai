@@ -827,10 +827,364 @@ app.get(
 
 
             /*
-             * Return all collected information.
-             */
+ * =========================
+ * BUILD MODEL
+ * =========================
+ */
 
-            res.json({
+
+/*
+ * First try to obtain Bzzoiro's
+ * own 1X2 probabilities.
+ */
+
+let bzzoiroHomeProbability =
+    extractPredictionProbability(
+        prediction,
+        "home"
+    );
+
+let bzzoiroDrawProbability =
+    extractPredictionProbability(
+        prediction,
+        "draw"
+    );
+
+let bzzoiroAwayProbability =
+    extractPredictionProbability(
+        prediction,
+        "away"
+    );
+
+
+/*
+ * If prediction data is unavailable,
+ * try the odds.
+ */
+
+if (
+    (
+        bzzoiroHomeProbability === null ||
+        bzzoiroDrawProbability === null ||
+        bzzoiroAwayProbability === null
+    ) &&
+    odds
+) {
+
+    const oddsHome =
+        toNumber(
+            odds.home_win
+        );
+
+    const oddsDraw =
+        toNumber(
+            odds.draw
+        );
+
+    const oddsAway =
+        toNumber(
+            odds.away_win
+        );
+
+
+    if (
+        oddsHome &&
+        oddsDraw &&
+        oddsAway
+    ) {
+
+        const impliedHome =
+            1 / oddsHome;
+
+        const impliedDraw =
+            1 / oddsDraw;
+
+        const impliedAway =
+            1 / oddsAway;
+
+
+        const total =
+            impliedHome +
+            impliedDraw +
+            impliedAway;
+
+
+        bzzoiroHomeProbability =
+            impliedHome / total;
+
+        bzzoiroDrawProbability =
+            impliedDraw / total;
+
+        bzzoiroAwayProbability =
+            impliedAway / total;
+
+    }
+
+}
+
+
+/*
+ * Final fallback.
+ *
+ * This is only used when the provider
+ * does not return usable probabilities.
+ */
+
+if (
+    bzzoiroHomeProbability === null
+) {
+
+    bzzoiroHomeProbability =
+        0.45;
+
+}
+
+if (
+    bzzoiroDrawProbability === null
+) {
+
+    bzzoiroDrawProbability =
+        0.28;
+
+}
+
+if (
+    bzzoiroAwayProbability === null
+) {
+
+    bzzoiroAwayProbability =
+        0.27;
+
+}
+
+
+/*
+ * Normalize probabilities.
+ */
+
+const probabilityTotal =
+    bzzoiroHomeProbability +
+    bzzoiroDrawProbability +
+    bzzoiroAwayProbability;
+
+
+bzzoiroHomeProbability /=
+    probabilityTotal;
+
+bzzoiroDrawProbability /=
+    probabilityTotal;
+
+bzzoiroAwayProbability /=
+    probabilityTotal;
+
+
+/*
+ * Try to use provider xG first.
+ */
+
+let homeXG =
+    extractXG(
+        stats,
+        prediction,
+        "home"
+    );
+
+let awayXG =
+    extractXG(
+        stats,
+        prediction,
+        "away"
+    );
+
+
+/*
+ * If xG is unavailable, estimate
+ * expected goals from the result
+ * probabilities.
+ */
+
+if (
+    homeXG === null ||
+    awayXG === null
+) {
+
+    const estimated =
+        estimateExpectedGoals(
+            bzzoiroHomeProbability,
+            bzzoiroDrawProbability,
+            bzzoiroAwayProbability
+        );
+
+
+    homeXG =
+        estimated.home;
+
+    awayXG =
+        estimated.away;
+
+}
+
+
+/*
+ * Generate the score matrix.
+ */
+
+const scoreProbabilities =
+    calculateScoreProbabilities(
+        homeXG,
+        awayXG
+    );
+
+
+/*
+ * Get the Top 5 most likely
+ * correct scores.
+ */
+
+const topCorrectScores =
+    scoreProbabilities
+        .slice(0, 5)
+        .map(
+            score => ({
+
+                score:
+                    `${score.home}-${score.away}`,
+
+                probability:
+                    percentage(
+                        score.probability
+                    ),
+
+                rawProbability:
+                    score.probability
+
+            })
+        );
+
+
+/*
+ * Top score.
+ */
+
+const topScore =
+    topCorrectScores[0] ||
+    null;
+
+
+/*
+ * Calculate 1X2 probabilities
+ * from our score model.
+ */
+
+const resultProbabilities =
+    calculateResultProbabilities(
+        scoreProbabilities
+    );
+
+
+/*
+ * Determine predicted winner.
+ */
+
+let predictedWinner =
+    "Draw";
+
+
+if (
+    resultProbabilities.homeWin >
+    resultProbabilities.draw &&
+    resultProbabilities.homeWin >
+    resultProbabilities.awayWin
+) {
+
+    predictedWinner =
+        homeTeam.name;
+
+}
+
+
+else if (
+    resultProbabilities.awayWin >
+    resultProbabilities.draw &&
+    resultProbabilities.awayWin >
+    resultProbabilities.homeWin
+) {
+
+    predictedWinner =
+        awayTeam.name;
+
+}
+
+
+/*
+ * Confidence is the probability
+ * of the model's strongest result.
+ */
+
+const confidence =
+    Math.max(
+        resultProbabilities.homeWin,
+        resultProbabilities.draw,
+        resultProbabilities.awayWin
+    );
+
+
+/*
+ * Build final model.
+ */
+
+const model = {
+
+    prediction:
+        topScore
+            ? topScore.score
+            : "N/A",
+
+    confidence:
+        percentage(
+            confidence
+        ),
+
+    expectedGoals: {
+
+        home:
+            Number(
+                homeXG.toFixed(2)
+            ),
+
+        away:
+            Number(
+                awayXG.toFixed(2)
+            )
+
+    },
+
+    predictedWinner:
+        predictedWinner,
+
+    resultProbabilities: {
+
+        homeWin:
+            percentage(
+                resultProbabilities.homeWin
+            ),
+
+        draw:
+            percentage(
+                resultProbabilities.draw
+            ),
+
+        awayWin:
+            percentage(
+                resultProbabilities.awayWin
+            )
+
+    },
+
+    topCorrectScores:
+        topCorrectScores
+
+};
 
                 success: true,
 
@@ -919,50 +1273,614 @@ app.get(
 
 
                 /*
-                 * Temporary model object.
-                 *
-                 * The proper statistical correct-score
-                 * engine will be added next.
-                 */
+ * =========================
+ * PREDICTION ENGINE
+ * =========================
+ */
 
-                model: {
 
-                    prediction:
-                        "Calculating...",
+/*
+ * Safely convert a value to a number.
+ */
 
-                    confidence:
-                        "Pending",
+function toNumber(value) {
 
-                    expectedGoals: {
+    const number =
+        Number(value);
 
-                        home:
-                            null,
+    return Number.isFinite(number)
+        ? number
+        : null;
 
-                        away:
-                            null
+}
 
-                    },
 
-                    predictedWinner:
-                        "Pending",
+/*
+ * Extract a probability from different
+ * possible Bzzoiro response structures.
+ */
 
-                    resultProbabilities: {
+function findProbability(
+    object,
+    keys
+) {
 
-                        homeWin:
-                            "Pending",
+    if (!object || typeof object !== "object") {
+        return null;
+    }
 
-                        draw:
-                            "Pending",
+    for (const key of keys) {
 
-                        awayWin:
-                            "Pending"
+        const value =
+            object[key];
 
-                    },
+        const number =
+            toNumber(value);
 
-                    topCorrectScores: []
+        if (
+            number !== null &&
+            number >= 0 &&
+            number <= 1
+        ) {
 
-                }
+            return number;
 
+        }
+
+    }
+
+    return null;
+}
+
+
+/*
+ * Poisson probability.
+ *
+ * P(X = k) =
+ * (e^-lambda * lambda^k) / k!
+ */
+
+function poissonProbability(
+    lambda,
+    goals
+) {
+
+    if (
+        !Number.isFinite(lambda) ||
+        lambda < 0
+    ) {
+
+        return 0;
+
+    }
+
+    let factorial =
+        1;
+
+    for (
+        let i = 2;
+        i <= goals;
+        i++
+    ) {
+
+        factorial *= i;
+
+    }
+
+    return (
+        Math.exp(-lambda) *
+        Math.pow(lambda, goals)
+    ) / factorial;
+
+}
+
+
+/*
+ * Calculate score probabilities.
+ */
+
+function calculateScoreProbabilities(
+    homeXG,
+    awayXG
+) {
+
+    const scores = [];
+
+    for (
+        let homeGoals = 0;
+        homeGoals <= 6;
+        homeGoals++
+    ) {
+
+        for (
+            let awayGoals = 0;
+            awayGoals <= 6;
+            awayGoals++
+        ) {
+
+            const homeProbability =
+                poissonProbability(
+                    homeXG,
+                    homeGoals
+                );
+
+            const awayProbability =
+                poissonProbability(
+                    awayXG,
+                    awayGoals
+                );
+
+            const probability =
+                homeProbability *
+                awayProbability;
+
+            scores.push({
+
+                home:
+                    homeGoals,
+
+                away:
+                    awayGoals,
+
+                probability:
+                    probability
+
+            });
+
+        }
+
+    }
+
+
+    scores.sort(
+        (a, b) =>
+            b.probability -
+            a.probability
+    );
+
+
+    return scores;
+
+}
+
+
+/*
+ * Convert probability to percentage.
+ */
+
+function percentage(
+    value
+) {
+
+    if (
+        !Number.isFinite(value)
+    ) {
+
+        return "N/A";
+
+    }
+
+    return (
+        value * 100
+    ).toFixed(1) + "%";
+
+}
+
+
+/*
+ * Calculate 1X2 probabilities from
+ * the Poisson score matrix.
+ */
+
+function calculateResultProbabilities(
+    scores
+) {
+
+    let homeWin = 0;
+
+    let draw = 0;
+
+    let awayWin = 0;
+
+
+    scores.forEach(
+        score => {
+
+            if (
+                score.home >
+                score.away
+            ) {
+
+                homeWin +=
+                    score.probability;
+
+            }
+
+            else if (
+                score.home ===
+                score.away
+            ) {
+
+                draw +=
+                    score.probability;
+
+            }
+
+            else {
+
+                awayWin +=
+                    score.probability;
+
+            }
+
+        }
+    );
+
+
+    const total =
+        homeWin +
+        draw +
+        awayWin;
+
+
+    if (total <= 0) {
+
+        return {
+
+            homeWin:
+                0,
+
+            draw:
+                0,
+
+            awayWin:
+                0
+
+        };
+
+    }
+
+
+    return {
+
+        homeWin:
+            homeWin / total,
+
+        draw:
+            draw / total,
+
+        awayWin:
+            awayWin / total
+
+    };
+
+}
+
+
+/*
+ * Find a useful probability inside
+ * Bzzoiro prediction data.
+ */
+
+function extractPredictionProbability(
+    prediction,
+    type
+) {
+
+    if (!prediction) {
+        return null;
+    }
+
+
+    const sources = [
+
+        prediction,
+
+        prediction.prediction,
+
+        prediction.result,
+
+        prediction.probabilities,
+
+        prediction.result_probabilities,
+
+        prediction.markets
+
+    ];
+
+
+    let keys = [];
+
+
+    if (type === "home") {
+
+        keys = [
+
+            "home_win_prob",
+
+            "home_win_probability",
+
+            "home_probability",
+
+            "probability_home",
+
+            "home"
+
+        ];
+
+    }
+
+
+    if (type === "draw") {
+
+        keys = [
+
+            "draw_prob",
+
+            "draw_probability",
+
+            "probability_draw",
+
+            "draw"
+
+        ];
+
+    }
+
+
+    if (type === "away") {
+
+        keys = [
+
+            "away_win_prob",
+
+            "away_win_probability",
+
+            "away_probability",
+
+            "probability_away",
+
+            "away"
+
+        ];
+
+    }
+
+
+    for (
+        const source of sources
+    ) {
+
+        const result =
+            findProbability(
+                source,
+                keys
+            );
+
+        if (
+            result !== null
+        ) {
+
+            return result;
+
+        }
+
+    }
+
+
+    return null;
+
+}
+
+
+/*
+ * Extract expected goals when
+ * Bzzoiro provides them.
+ */
+
+function extractXG(
+    stats,
+    prediction,
+    side
+) {
+
+    const sources = [
+
+        stats,
+
+        stats?.stats,
+
+        stats?.statistics,
+
+        prediction,
+
+        prediction?.prediction,
+
+        prediction?.xg,
+
+        prediction?.expected_goals
+
+    ];
+
+
+    const keys =
+        side === "home"
+
+            ? [
+                "home_xg",
+                "home_expected_goals",
+                "expected_goals_home",
+                "xg_home",
+                "home"
+              ]
+
+            : [
+                "away_xg",
+                "away_expected_goals",
+                "expected_goals_away",
+                "xg_away",
+                "away"
+              ];
+
+
+    for (
+        const source of sources
+    ) {
+
+        if (
+            !source ||
+            typeof source !== "object"
+        ) {
+
+            continue;
+
+        }
+
+
+        const result =
+            findProbability(
+                source,
+                keys
+            );
+
+
+        if (
+            result !== null &&
+            result > 0
+        ) {
+
+            return result;
+
+        }
+
+    }
+
+
+    return null;
+
+}
+
+
+/*
+ * Estimate expected goals from
+ * Bzzoiro 1X2 probabilities when xG
+ * is unavailable.
+ */
+
+function estimateExpectedGoals(
+    homeProbability,
+    drawProbability,
+    awayProbability
+) {
+
+    const home =
+        Number(
+            homeProbability
+        );
+
+    const draw =
+        Number(
+            drawProbability
+        );
+
+    const away =
+        Number(
+            awayProbability
+        );
+
+
+    if (
+        !Number.isFinite(home) ||
+        !Number.isFinite(draw) ||
+        !Number.isFinite(away)
+    ) {
+
+        return {
+
+            home:
+                1.50,
+
+            away:
+                1.10
+
+        };
+
+    }
+
+
+    /*
+     * Stronger home probability increases
+     * the home expected goals.
+     */
+
+    const homeXG =
+        1.10 +
+        (
+            home -
+            away
+        ) * 1.80;
+
+
+    /*
+     * Draw probability influences the
+     * total scoring expectation.
+     */
+
+    const totalXG =
+        2.20 -
+        (
+            draw -
+            0.25
+        ) * 1.50;
+
+
+    let awayXG =
+        totalXG -
+        homeXG;
+
+
+    let finalHomeXG =
+        homeXG;
+
+
+    /*
+     * Keep the model inside sensible
+     * football scoring ranges.
+     */
+
+    finalHomeXG =
+        Math.max(
+            0.20,
+            Math.min(
+                finalHomeXG,
+                4.50
+            )
+        );
+
+
+    awayXG =
+        Math.max(
+            0.15,
+            Math.min(
+                awayXG,
+                4.00
+            )
+        );
+
+
+    return {
+
+        home:
+            finalHomeXG,
+
+        away:
+            awayXG
+
+    };
+
+                   }
+
+               model: model
             });
 
         } catch (error) {
