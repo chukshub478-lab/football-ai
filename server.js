@@ -12,15 +12,20 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const PORT = Number(process.env.PORT) || 10000;
 
-const BZZOIRO_API_KEY = process.env.BZZOIRO_API_KEY;
+const BZZOIRO_API_KEY =
+    process.env.BZZOIRO_API_KEY;
 
-const BZZOIRO_URL = "https://sports.bzzoiro.com/api/v2";
+const BZZOIRO_URL =
+    "https://sports.bzzoiro.com/api/v2";
 
-const IMAGE_URL = "https://sports.bzzoiro.com/img";
+const IMAGE_URL =
+    "https://sports.bzzoiro.com/img";
 
-const cache = new Map();
+const cache =
+    new Map();
 
-const CACHE_TIME = 10 * 60 * 1000;
+const CACHE_TIME =
+    10 * 60 * 1000;
 
 
 /* =========================
@@ -30,36 +35,49 @@ const CACHE_TIME = 10 * 60 * 1000;
 async function bzzoiroAPI(endpoint) {
 
     if (!BZZOIRO_API_KEY) {
-        throw new Error("BZZOIRO_API_KEY is missing.");
+
+        throw new Error(
+            "BZZOIRO_API_KEY is missing."
+        );
+
     }
 
-    const cached = cache.get(endpoint);
+    const cached =
+        cache.get(endpoint);
 
     if (
         cached &&
-        Date.now() - cached.time < CACHE_TIME
+        Date.now() - cached.time <
+        CACHE_TIME
     ) {
+
         return cached.data;
+
     }
 
-    const response = await fetch(
-        `${BZZOIRO_URL}${endpoint}`,
-        {
-            headers: {
-                "Authorization":
-                    `Token ${BZZOIRO_API_KEY}`,
+    const response =
+        await fetch(
+            `${BZZOIRO_URL}${endpoint}`,
+            {
+                headers: {
 
-                "Accept":
-                    "application/json"
+                    "Authorization":
+                        `Token ${BZZOIRO_API_KEY}`,
+
+                    "Accept":
+                        "application/json"
+
+                }
             }
-        }
-    );
+        );
+
 
     let data;
 
     try {
 
-        data = await response.json();
+        data =
+            await response.json();
 
     } catch {
 
@@ -69,6 +87,7 @@ async function bzzoiroAPI(endpoint) {
 
     }
 
+
     if (!response.ok) {
 
         throw new Error(
@@ -77,15 +96,21 @@ async function bzzoiroAPI(endpoint) {
 
     }
 
+
     cache.set(
         endpoint,
         {
-            time: Date.now(),
-            data
+            time:
+                Date.now(),
+
+            data:
+                data
         }
     );
 
+
     return data;
+
 }
 
 
@@ -96,17 +121,16 @@ async function bzzoiroAPI(endpoint) {
 async function getTeam(teamId) {
 
     if (!teamId) {
+
         return null;
+
     }
 
     try {
 
-        const data =
-            await bzzoiroAPI(
-                `/teams/${teamId}/`
-            );
-
-        return data;
+        return await bzzoiroAPI(
+            `/teams/${teamId}/`
+        );
 
     } catch (error) {
 
@@ -116,7 +140,9 @@ async function getTeam(teamId) {
         );
 
         return null;
+
     }
+
 }
 
 
@@ -127,17 +153,16 @@ async function getTeam(teamId) {
 async function getLeague(leagueId) {
 
     if (!leagueId) {
+
         return null;
+
     }
 
     try {
 
-        const data =
-            await bzzoiroAPI(
-                `/leagues/${leagueId}/`
-            );
-
-        return data;
+        return await bzzoiroAPI(
+            `/leagues/${leagueId}/`
+        );
 
     } catch (error) {
 
@@ -147,7 +172,9 @@ async function getLeague(leagueId) {
         );
 
         return null;
+
     }
+
 }
 
 
@@ -158,17 +185,16 @@ async function getLeague(leagueId) {
 async function getEvent(eventId) {
 
     if (!eventId) {
+
         return null;
+
     }
 
     try {
 
-        const data =
-            await bzzoiroAPI(
-                `/events/${eventId}/`
-            );
-
-        return data;
+        return await bzzoiroAPI(
+            `/events/${eventId}/`
+        );
 
     } catch (error) {
 
@@ -178,7 +204,9 @@ async function getEvent(eventId) {
         );
 
         return null;
+
     }
+
 }
 
 
@@ -192,6 +220,7 @@ function getNigeriaDate() {
         new Intl.DateTimeFormat(
             "en-CA",
             {
+
                 timeZone:
                     "Africa/Lagos",
 
@@ -203,12 +232,15 @@ function getNigeriaDate() {
 
                 day:
                     "2-digit"
+
             }
         );
+
 
     return formatter.format(
         new Date()
     );
+
 }
 
 
@@ -216,19 +248,37 @@ function getNigeriaDate() {
    CONVERT UTC TO NIGERIA DATE
 ========================= */
 
-function getNigeriaMatchDate(matchDate) {
+function getNigeriaMatchDate(
+    matchDate
+) {
 
     if (!matchDate) {
+
         return null;
+
     }
+
 
     const dateObject =
         new Date(matchDate);
+
+
+    if (
+        Number.isNaN(
+            dateObject.getTime()
+        )
+    ) {
+
+        return null;
+
+    }
+
 
     const formatter =
         new Intl.DateTimeFormat(
             "en-CA",
             {
+
                 timeZone:
                     "Africa/Lagos",
 
@@ -240,12 +290,668 @@ function getNigeriaMatchDate(matchDate) {
 
                 day:
                     "2-digit"
+
             }
         );
+
 
     return formatter.format(
         dateObject
     );
+
+}
+
+
+/* =========================
+   PREDICTION ENGINE HELPERS
+========================= */
+
+
+/*
+ * Convert a value into a number.
+ */
+
+function toNumber(value) {
+
+    const number =
+        Number(value);
+
+
+    return Number.isFinite(number)
+        ? number
+        : null;
+
+}
+
+
+/*
+ * Find probability values from
+ * different possible API structures.
+ */
+
+function findProbability(
+    object,
+    keys
+) {
+
+    if (
+        !object ||
+        typeof object !== "object"
+    ) {
+
+        return null;
+
+    }
+
+
+    for (
+        const key of keys
+    ) {
+
+        const value =
+            object[key];
+
+
+        const number =
+            toNumber(value);
+
+
+        if (
+            number !== null &&
+            number >= 0 &&
+            number <= 1
+        ) {
+
+            return number;
+
+        }
+
+
+        /*
+         * Also support percentages
+         * such as 72 instead of 0.72.
+         */
+
+        if (
+            number !== null &&
+            number > 1 &&
+            number <= 100
+        ) {
+
+            return number / 100;
+
+        }
+
+    }
+
+
+    return null;
+
+}
+
+
+/*
+ * Poisson probability.
+ *
+ * P(X = k)
+ *
+ * =
+ *
+ * (e^-lambda × lambda^k) / k!
+ */
+
+function poissonProbability(
+    lambda,
+    goals
+) {
+
+    if (
+        !Number.isFinite(lambda) ||
+        lambda < 0
+    ) {
+
+        return 0;
+
+    }
+
+
+    let factorial =
+        1;
+
+
+    for (
+        let i = 2;
+        i <= goals;
+        i++
+    ) {
+
+        factorial *= i;
+
+    }
+
+
+    return (
+        Math.exp(-lambda) *
+        Math.pow(lambda, goals)
+    ) / factorial;
+
+}
+
+
+/*
+ * Calculate all possible
+ * correct-score probabilities.
+ */
+
+function calculateScoreProbabilities(
+    homeXG,
+    awayXG
+) {
+
+    const scores = [];
+
+
+    for (
+        let homeGoals = 0;
+        homeGoals <= 6;
+        homeGoals++
+    ) {
+
+        for (
+            let awayGoals = 0;
+            awayGoals <= 6;
+            awayGoals++
+        ) {
+
+            const homeProbability =
+                poissonProbability(
+                    homeXG,
+                    homeGoals
+                );
+
+
+            const awayProbability =
+                poissonProbability(
+                    awayXG,
+                    awayGoals
+                );
+
+
+            const probability =
+                homeProbability *
+                awayProbability;
+
+
+            scores.push({
+
+                home:
+                    homeGoals,
+
+                away:
+                    awayGoals,
+
+                probability:
+                    probability
+
+            });
+
+        }
+
+    }
+
+
+    scores.sort(
+        (a, b) =>
+            b.probability -
+            a.probability
+    );
+
+
+    return scores;
+
+}
+
+
+/*
+ * Convert probability to percentage.
+ */
+
+function percentage(value) {
+
+    if (
+        !Number.isFinite(value)
+    ) {
+
+        return "N/A";
+
+    }
+
+
+    return (
+        value * 100
+    ).toFixed(1) + "%";
+
+}
+
+
+/*
+ * Calculate Home/Draw/Away
+ * probabilities from score matrix.
+ */
+
+function calculateResultProbabilities(
+    scores
+) {
+
+    let homeWin =
+        0;
+
+    let draw =
+        0;
+
+    let awayWin =
+        0;
+
+
+    scores.forEach(
+        score => {
+
+            if (
+                score.home >
+                score.away
+            ) {
+
+                homeWin +=
+                    score.probability;
+
+            }
+
+            else if (
+                score.home ===
+                score.away
+            ) {
+
+                draw +=
+                    score.probability;
+
+            }
+
+            else {
+
+                awayWin +=
+                    score.probability;
+
+            }
+
+        }
+    );
+
+
+    const total =
+        homeWin +
+        draw +
+        awayWin;
+
+
+    if (
+        total <= 0
+    ) {
+
+        return {
+
+            homeWin:
+                0,
+
+            draw:
+                0,
+
+            awayWin:
+                0
+
+        };
+
+    }
+
+
+    return {
+
+        homeWin:
+            homeWin / total,
+
+        draw:
+            draw / total,
+
+        awayWin:
+            awayWin / total
+
+    };
+
+}
+
+
+/*
+ * Extract Home/Draw/Away
+ * probabilities.
+ */
+
+function extractPredictionProbability(
+    prediction,
+    type
+) {
+
+    if (!prediction) {
+
+        return null;
+
+    }
+
+
+    const sources = [
+
+        prediction,
+
+        prediction.prediction,
+
+        prediction.result,
+
+        prediction.probabilities,
+
+        prediction.result_probabilities,
+
+        prediction.markets
+
+    ];
+
+
+    let keys = [];
+
+
+    if (
+        type === "home"
+    ) {
+
+        keys = [
+
+            "home_win_prob",
+
+            "home_win_probability",
+
+            "home_probability",
+
+            "probability_home",
+
+            "home"
+
+        ];
+
+    }
+
+
+    if (
+        type === "draw"
+    ) {
+
+        keys = [
+
+            "draw_prob",
+
+            "draw_probability",
+
+            "probability_draw",
+
+            "draw"
+
+        ];
+
+    }
+
+
+    if (
+        type === "away"
+    ) {
+
+        keys = [
+
+            "away_win_prob",
+
+            "away_win_probability",
+
+            "away_probability",
+
+            "probability_away",
+
+            "away"
+
+        ];
+
+    }
+
+
+    for (
+        const source of sources
+    ) {
+
+        const result =
+            findProbability(
+                source,
+                keys
+            );
+
+
+        if (
+            result !== null
+        ) {
+
+            return result;
+
+        }
+
+    }
+
+
+    return null;
+
+}
+
+
+/*
+ * Extract expected goals.
+ */
+
+function extractXG(
+    stats,
+    prediction,
+    side
+) {
+
+    const sources = [
+
+        stats,
+
+        stats?.stats,
+
+        stats?.statistics,
+
+        prediction,
+
+        prediction?.prediction,
+
+        prediction?.xg,
+
+        prediction?.expected_goals
+
+    ];
+
+
+    const keys =
+        side === "home"
+
+            ? [
+
+                "home_xg",
+
+                "home_expected_goals",
+
+                "expected_goals_home",
+
+                "xg_home",
+
+                "home"
+
+            ]
+
+            : [
+
+                "away_xg",
+
+                "away_expected_goals",
+
+                "expected_goals_away",
+
+                "xg_away",
+
+                "away"
+
+            ];
+
+
+    for (
+        const source of sources
+    ) {
+
+        if (
+            !source ||
+            typeof source !== "object"
+        ) {
+
+            continue;
+
+        }
+
+
+        const result =
+            findProbability(
+                source,
+                keys
+            );
+
+
+        if (
+            result !== null &&
+            result > 0
+        ) {
+
+            return result;
+
+        }
+
+    }
+
+
+    return null;
+
+}
+
+
+/*
+ * Estimate expected goals when
+ * direct xG is unavailable.
+ */
+
+function estimateExpectedGoals(
+    homeProbability,
+    drawProbability,
+    awayProbability
+) {
+
+    const home =
+        Number(
+            homeProbability
+        );
+
+
+    const draw =
+        Number(
+            drawProbability
+        );
+
+
+    const away =
+        Number(
+            awayProbability
+        );
+
+
+    if (
+        !Number.isFinite(home) ||
+        !Number.isFinite(draw) ||
+        !Number.isFinite(away)
+    ) {
+
+        return {
+
+            home:
+                1.50,
+
+            away:
+                1.10
+
+        };
+
+    }
+
+
+    let homeXG =
+        1.10 +
+        (
+            home -
+            away
+        ) * 1.80;
+
+
+    const totalXG =
+        2.20 -
+        (
+            draw -
+            0.25
+        ) * 1.50;
+
+
+    let awayXG =
+        totalXG -
+        homeXG;
+
+
+    homeXG =
+        Math.max(
+            0.20,
+            Math.min(
+                homeXG,
+                4.50
+            )
+        );
+
+
+    awayXG =
+        Math.max(
+            0.15,
+            Math.min(
+                awayXG,
+                4.00
+            )
+        );
+
+
+    return {
+
+        home:
+            homeXG,
+
+        away:
+            awayXG
+
+    };
+
 }
 
 
@@ -259,31 +965,16 @@ app.get(
 
         try {
 
-            /*
-             * Use the requested date if supplied.
-             * Otherwise use today's date in Nigeria.
-             */
-
             const nigeriaDate =
                 req.query.date ||
                 getNigeriaDate();
 
 
-            /*
-             * Nigeria is UTC+1.
-             *
-             * We request both the UTC date that
-             * contains the beginning of the Nigerian
-             * day and the following UTC date.
-             *
-             * This prevents matches around midnight
-             * from being missed.
-             */
-
             const selectedDate =
                 new Date(
                     `${nigeriaDate}T00:00:00+01:00`
                 );
+
 
             const nextDate =
                 new Date(
@@ -297,64 +988,63 @@ app.get(
                     .toISOString()
                     .slice(0, 10);
 
+
             const utcTo =
                 nextDate
                     .toISOString()
                     .slice(0, 10);
 
 
-            /*
-             * Request the UTC date range from Bzzoiro.
-             */
-
             const endpoint =
                 `/events/?date_from=${utcFrom}&date_to=${utcTo}&limit=200`;
+
 
             const data =
                 await bzzoiroAPI(
                     endpoint
                 );
 
+
             const rawFixtures =
                 data.results || [];
 
-
-            /*
-             * Enrich fixtures.
-             */
 
             const fixtures =
                 await Promise.all(
 
                     rawFixtures.map(
-                        async (item) => {
+                        async item => {
 
                             let eventDetail =
                                 null;
 
+
                             let homeTeam =
-                                typeof item.home_team === "object"
+                                typeof item.home_team ===
+                                "object"
+
                                     ? item.home_team
+
                                     : null;
+
 
                             let awayTeam =
-                                typeof item.away_team === "object"
+                                typeof item.away_team ===
+                                "object"
+
                                     ? item.away_team
+
                                     : null;
+
 
                             let league =
-                                typeof item.league === "object"
+                                typeof item.league ===
+                                "object"
+
                                     ? item.league
+
                                     : null;
 
-
-                            /*
-                             * Some Bzzoiro responses
-                             * return only IDs or strings.
-                             *
-                             * Get the full event when
-                             * required.
-                             */
 
                             if (
                                 !homeTeam?.name ||
@@ -367,6 +1057,7 @@ app.get(
                                         item.id
                                     );
 
+
                                 if (
                                     eventDetail
                                 ) {
@@ -375,21 +1066,20 @@ app.get(
                                         eventDetail.home_team ||
                                         homeTeam;
 
+
                                     awayTeam =
                                         eventDetail.away_team ||
                                         awayTeam;
 
+
                                     league =
                                         eventDetail.league ||
                                         league;
+
                                 }
+
                             }
 
-
-                            /*
-                             * Get home team details
-                             * if the name is still missing.
-                             */
 
                             if (
                                 !homeTeam?.name &&
@@ -400,13 +1090,9 @@ app.get(
                                     await getTeam(
                                         item.home_team_id
                                     );
+
                             }
 
-
-                            /*
-                             * Get away team details
-                             * if the name is still missing.
-                             */
 
                             if (
                                 !awayTeam?.name &&
@@ -417,13 +1103,9 @@ app.get(
                                     await getTeam(
                                         item.away_team_id
                                     );
+
                             }
 
-
-                            /*
-                             * Get league details
-                             * if the name is still missing.
-                             */
 
                             if (
                                 !league?.name &&
@@ -434,6 +1116,7 @@ app.get(
                                     await getLeague(
                                         item.league_id
                                     );
+
                             }
 
 
@@ -442,10 +1125,12 @@ app.get(
                                 item.home_team_id ||
                                 null;
 
+
                             const awayId =
                                 awayTeam?.id ||
                                 item.away_team_id ||
                                 null;
+
 
                             const leagueId =
                                 league?.id ||
@@ -459,11 +1144,6 @@ app.get(
                                 item.date ||
                                 null;
 
-
-                            /*
-                             * Convert match time to
-                             * the Nigerian calendar date.
-                             */
 
                             const nigeriaMatchDate =
                                 getNigeriaMatchDate(
@@ -505,6 +1185,7 @@ app.get(
                                         leagueId
                                             ? `${IMAGE_URL}/league/${leagueId}/`
                                             : null
+
                                 },
 
 
@@ -521,6 +1202,7 @@ app.get(
                                         homeId
                                             ? `${IMAGE_URL}/team/${homeId}/`
                                             : null
+
                                 },
 
 
@@ -537,6 +1219,7 @@ app.get(
                                         awayId
                                             ? `${IMAGE_URL}/team/${awayId}/`
                                             : null
+
                                 },
 
 
@@ -548,583 +1231,4 @@ app.get(
 
                                     away:
                                         item.away_score ??
-                                        null
-                                }
-
-                            };
-
-                        }
-                    )
-
-                );
-
-
-            /*
-             * Only keep matches that belong
-             * to the selected Nigerian date.
-             */
-
-            const filteredFixtures =
-                fixtures.filter(
-                    (fixture) =>
-                        fixture.nigeriaDate ===
-                        nigeriaDate
-                );
-
-
-            /*
-             * Sort matches by kickoff time.
-             */
-
-            filteredFixtures.sort(
-                (a, b) => {
-
-                    const dateA =
-                        new Date(
-                            a.date || 0
-                        );
-
-                    const dateB =
-                        new Date(
-                            b.date || 0
-                        );
-
-                    return (
-                        dateA.getTime() -
-                        dateB.getTime()
-                    );
-
-                }
-            );
-
-
-            res.json({
-
-                success:
-                    true,
-
-                provider:
-                    "Bzzoiro Sports Data",
-
-                date:
-                    nigeriaDate,
-
-                timezone:
-                    "Africa/Lagos",
-
-                count:
-                    filteredFixtures.length,
-
-                fixtures:
-                    filteredFixtures
-
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Fixtures error:",
-                error
-            );
-
-            res.status(500).json({
-
-                success:
-                    false,
-
-                message:
-                    error.message
-
-            });
-
-        }
-
-    }
-);
-/* =========================
-   MATCH ANALYSIS
-========================= */
-
-app.get(
-    "/api/fixture/:id",
-    async (req, res) => {
-
-        try {
-
-            const fixtureId =
-                req.params.id;
-
-            if (!fixtureId) {
-
-                return res.status(400).json({
-
-                    success: false,
-
-                    message:
-                        "Match ID is required."
-
-                });
-
-            }
-
-
-            /*
-             * Get the main match information.
-             */
-
-            const match =
-                await getEvent(
-                    fixtureId
-                );
-
-
-            if (!match) {
-
-                return res.status(404).json({
-
-                    success: false,
-
-                    message:
-                        "Match not found."
-
-                });
-
-            }
-
-
-            /*
-             * Get additional Bzzoiro data.
-             *
-             * Each request is protected so one
-             * unavailable endpoint does not break
-             * the entire analysis.
-             */
-
-            async function getResource(
-                endpoint
-            ) {
-
-                try {
-
-                    return await bzzoiroAPI(
-                        endpoint
-                    );
-
-                } catch (error) {
-
-                    console.error(
-                        `Resource error ${endpoint}:`,
-                        error.message
-                    );
-
-                    return null;
-
-                }
-
-            }
-
-
-            const [
-
-                stats,
-
-                h2h,
-
-                odds,
-
-                prediction,
-
-                lineups,
-
-                incidents
-
-            ] = await Promise.all([
-
-                getResource(
-                    `/events/${fixtureId}/stats/`
-                ),
-
-                getResource(
-                    `/events/${fixtureId}/h2h/`
-                ),
-
-                getResource(
-                    `/events/${fixtureId}/odds/`
-                ),
-
-                getResource(
-                    `/events/${fixtureId}/prediction/`
-                ),
-
-                getResource(
-                    `/events/${fixtureId}/lineups/`
-                ),
-
-                getResource(
-                    `/events/${fixtureId}/incidents/`
-                )
-
-            ]);
-
-
-            /*
-             * Safely identify teams.
-             */
-
-            const homeTeam =
-                typeof match.home_team === "object"
-                    ? match.home_team
-                    : {
-                        name:
-                            match.home_team ||
-                            "Home Team",
-
-                        id:
-                            match.home_team_id ||
-                            null
-                    };
-
-
-            const awayTeam =
-                typeof match.away_team === "object"
-                    ? match.away_team
-                    : {
-                        name:
-                            match.away_team ||
-                            "Away Team",
-
-                        id:
-                            match.away_team_id ||
-                            null
-                    };
-
-
-            const league =
-                typeof match.league === "object"
-                    ? match.league
-                    : {
-                        name:
-                            match.league ||
-                            "Unknown League",
-
-                        id:
-                            match.league_id ||
-                            null
-                    };
-
-
-            /*
-             * Prepare Bzzoiro prediction.
-             *
-             * We return the raw prediction as well
-             * because the structure can differ between
-             * competitions and matches.
-             */
-
-            let bzzoiroPrediction =
-                prediction || null;
-
-
-            /*
-             * Return all collected information.
-             */
-
-            res.json({
-
-                success: true,
-
-                provider:
-                    "Bzzoiro Sports Data",
-
-                match: {
-
-                    id:
-                        match.id ||
-                        fixtureId,
-
-                    home:
-                        homeTeam.name,
-
-                    away:
-                        awayTeam.name,
-
-                    homeId:
-                        homeTeam.id ||
-                        match.home_team_id ||
-                        null,
-
-                    awayId:
-                        awayTeam.id ||
-                        match.away_team_id ||
-                        null,
-
-                    league:
-                        league.name,
-
-                    leagueId:
-                        league.id ||
-                        match.league_id ||
-                        null,
-
-                    date:
-                        match.event_date ||
-                        match.start_time ||
-                        null,
-
-                    status:
-                        match.status ||
-                        "unknown",
-
-                    score: {
-
-                        home:
-                            match.home_score ??
-                            null,
-
-                        away:
-                            match.away_score ??
-                            null
-
-                    }
-
-                },
-
-
-                /*
-                 * Raw provider data.
-                 */
-
-                data: {
-
-                    stats:
-                        stats,
-
-                    h2h:
-                        h2h,
-
-                    odds:
-                        odds,
-
-                    prediction:
-                        bzzoiroPrediction,
-
-                    lineups:
-                        lineups,
-
-                    incidents:
-                        incidents
-
-                },
-
-
-                /*
-                 * Temporary model object.
-                 *
-                 * The proper statistical correct-score
-                 * engine will be added next.
-                 */
-
-                model: {
-
-                    prediction:
-                        "Calculating...",
-
-                    confidence:
-                        "Pending",
-
-                    expectedGoals: {
-
-                        home:
-                            null,
-
-                        away:
-                            null
-
-                    },
-
-                    predictedWinner:
-                        "Pending",
-
-                    resultProbabilities: {
-
-                        homeWin:
-                            "Pending",
-
-                        draw:
-                            "Pending",
-
-                        awayWin:
-                            "Pending"
-
-                    },
-
-                    topCorrectScores: []
-
-                }
-
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Match analysis error:",
-                error
-            );
-
-            res.status(500).json({
-
-                success: false,
-
-                message:
-                    error.message ||
-                    "Unable to analyze match."
-
-            });
-
-        }
-
-    }
-);
-
-/* =========================
-   BZZOIRO CONNECTION TEST
-========================= */
-
-app.get(
-    "/api/bzzoiro-test",
-    async (req, res) => {
-
-        try {
-
-            const data =
-                await bzzoiroAPI(
-                    "/events/?limit=5"
-                );
-
-            res.json({
-
-                success:
-                    true,
-
-                provider:
-                    "Bzzoiro Sports Data",
-
-                message:
-                    "Bzzoiro API connection is working.",
-
-                count:
-                    data.count ?? 0,
-
-                results:
-                    data.results ?? []
-
-            });
-
-        } catch (error) {
-
-            console.error(
-                "Bzzoiro test error:",
-                error
-            );
-
-            res.status(500).json({
-
-                success:
-                    false,
-
-                provider:
-                    "Bzzoiro Sports Data",
-
-                message:
-                    error.message
-
-            });
-
-        }
-
-    }
-);
-
-
-/* =========================
-   HEALTH CHECK
-========================= */
-
-app.get(
-    "/api/health",
-    (req, res) => {
-
-        res.json({
-
-            success:
-                true,
-
-            message:
-                "Football AI backend is running",
-
-            bzzoiroConfigured:
-                Boolean(
-                    BZZOIRO_API_KEY
-                )
-
-        });
-
-    }
-);
-
-
-/* =========================
-   FRONTEND
-========================= */
-
-app.get(
-    "*",
-    (req, res) => {
-
-        res.sendFile(
-            path.join(
-                __dirname,
-                "public",
-                "index.html"
-            )
-        );
-
-    }
-);
-
-
-/* =========================
-   START SERVER
-========================= */
-
-app.listen(
-    PORT,
-    "0.0.0.0",
-    () => {
-
-        console.log(
-            "================================"
-        );
-
-        console.log(
-            "Football AI server started"
-        );
-
-        console.log(
-            `PORT: ${PORT}`
-        );
-
-        console.log(
-            `BZZOIRO API KEY: ${
-                BZZOIRO_API_KEY
-                    ? "Configured"
-                    : "Missing"
-            }`
-        );
-
-        console.log(
-            "================================"
-        );
-
-    }
-);
+            
