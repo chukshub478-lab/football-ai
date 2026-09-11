@@ -1048,6 +1048,10 @@ app.get(
 
 
         } catch (error) {
+    console.error("Fixtures error:", error);
 
-            console.error(
-                "Fixtures error:"
+    res.status(500).json({
+        success: false,
+        message: error.message
+    });
+        }
