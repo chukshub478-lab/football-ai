@@ -1020,4 +1020,4 @@ app.get(
                     )
                     .sort(
                         (a, b) =>
-                            new Dat
+                            new Date
