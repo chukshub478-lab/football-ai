@@ -270,6 +270,34 @@ async function getLeague(id) {
 }
 
 
+// ASSUMPTION: buildModel() pulls prediction + odds + stats from Bzzoiro's
+// per-event data. I don't know the exact endpoints your account exposes for
+// these, so I'm guessing paths that follow the same pattern as /events/:id/.
+// If Bzzoiro uses different endpoint names for these, tell me and I'll fix it.
+async function getPrediction(id) {
+
+    return safe(
+        `/events/${id}/prediction/`
+    );
+}
+
+
+async function getOdds(id) {
+
+    return safe(
+        `/events/${id}/odds/`
+    );
+}
+
+
+async function getStats(id) {
+
+    return safe(
+        `/events/${id}/statistics/`
+    );
+}
+
+
 /* =========================
    POISSON MODEL
 ========================= */
@@ -384,6 +412,17 @@ function getResultProbabilities(
         home +
         draw +
         away;
+
+    // FIX: guard against divide-by-zero (would otherwise produce NaN
+    // if every score probability rounded down to 0, e.g. huge xG values)
+    if (!total) {
+
+        return {
+            home: 0.33,
+            draw: 0.34,
+            away: 0.33
+        };
+    }
 
     return {
 
@@ -991,33 +1030,4 @@ app.get(
                                     logo:
                                         awayId
                                             ? `${IMG}/team/${awayId}/`
-                                            : null
-                                },
-
-
-                                score: {
-
-                                    home:
-                                        item.home_score ??
-                                        null,
-
-                                    away:
-                                        item.away_score ??
-                                        null
-                                }
-                            };
-                        }
-                    )
-                );
-
-
-            const filtered =
-                fixtures
-                    .filter(
-                        item =>
-                            item.nigeriaDate ===
-                            date
-                    )
-                    .sort(
-                        (a, b) =>
-                            new Date
+           
