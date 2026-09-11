@@ -12,6 +12,7 @@ app.use(express.static(path.join(__dirname, "public")));
 
 const PORT = Number(process.env.PORT) || 10000;
 const KEY = process.env.BZZOIRO_API_KEY;
+
 const API = "https://sports.bzzoiro.com/api/v2";
 const IMG = "https://sports.bzzoiro.com/img";
 
@@ -26,29 +27,24 @@ const CACHE_TIME = 10 * 60 * 1000;
 async function api(endpoint) {
 
     if (!KEY) {
-        throw new Error(
-            "BZZOIRO_API_KEY is missing."
-        );
+        throw new Error("BZZOIRO_API_KEY is missing.");
     }
 
-    const saved = cache.get(endpoint);
+    const cached = cache.get(endpoint);
 
     if (
-        saved &&
-        Date.now() - saved.time < CACHE_TIME
+        cached &&
+        Date.now() - cached.time < CACHE_TIME
     ) {
-        return saved.data;
+        return cached.data;
     }
 
-    const response = await fetch(
-        API + endpoint,
-        {
-            headers: {
-                Authorization: `Token ${KEY}`,
-                Accept: "application/json"
-            }
+    const response = await fetch(API + endpoint, {
+        headers: {
+            Authorization: `Token ${KEY}`,
+            Accept: "application/json"
         }
-    );
+    });
 
     let data;
 
@@ -66,22 +62,24 @@ async function api(endpoint) {
         );
     }
 
-    cache.set(
-        endpoint,
-        {
-            time: Date.now(),
-            data
-        }
-    );
+    cache.set(endpoint, {
+        time: Date.now(),
+        data
+    });
 
     return data;
 }
 
 
+/* =========================
+   SAFE API REQUEST
+========================= */
+
 async function safe(endpoint) {
 
     try {
         return await api(endpoint);
+
     } catch (error) {
 
         console.error(
@@ -95,44 +93,48 @@ async function safe(endpoint) {
 
 
 /* =========================
-   BASIC HELPERS
+   HELPERS
 ========================= */
 
-function number(value) {
+function num(value) {
 
-    const n = Number(value);
+    const number = Number(value);
 
-    return Number.isFinite(n)
-        ? n
+    return Number.isFinite(number)
+        ? number
         : null;
 }
 
 
 function probability(value) {
 
-    const n = number(value);
+    const number = num(value);
 
-    if (n === null) {
+    if (number === null) {
         return null;
     }
 
     if (
-        n > 1 &&
-        n <= 100
+        number > 1 &&
+        number <= 100
     ) {
-        return n / 100;
+        return number / 100;
     }
 
     if (
-        n >= 0 &&
-        n <= 1
+        number >= 0 &&
+        number <= 1
     ) {
-        return n;
+        return number;
     }
 
     return null;
 }
 
+
+/* =========================
+   FIND VALUE INSIDE OBJECT
+========================= */
 
 function findValue(
     object,
@@ -143,14 +145,12 @@ function findValue(
     if (
         !object ||
         typeof object !== "object" ||
-        depth > 5
+        depth > 6
     ) {
         return null;
     }
 
-    for (
-        const key of keys
-    ) {
+    for (const key of keys) {
 
         if (
             Object.prototype.hasOwnProperty.call(
@@ -159,40 +159,31 @@ function findValue(
             )
         ) {
 
-            const value =
-                probability(
-                    object[key]
-                );
+            const value = probability(
+                object[key]
+            );
 
-            if (
-                value !== null
-            ) {
+            if (value !== null) {
                 return value;
             }
         }
     }
 
-
-    for (
-        const value of Object.values(object)
-    ) {
+    for (const value of Object.values(object)) {
 
         if (
             value &&
             typeof value === "object"
         ) {
 
-            const result =
-                findValue(
-                    value,
-                    keys,
-                    depth + 1
-                );
+            const found = findValue(
+                value,
+                keys,
+                depth + 1
+            );
 
-            if (
-                result !== null
-            ) {
-                return result;
+            if (found !== null) {
+                return found;
             }
         }
     }
@@ -202,7 +193,7 @@ function findValue(
 
 
 /* =========================
-   DATE HELPERS
+   NIGERIA DATE
 ========================= */
 
 function nigeriaDate() {
@@ -215,9 +206,7 @@ function nigeriaDate() {
             month: "2-digit",
             day: "2-digit"
         }
-    ).format(
-        new Date()
-    );
+    ).format(new Date());
 }
 
 
@@ -227,14 +216,9 @@ function localDate(value) {
         return null;
     }
 
-    const date =
-        new Date(value);
+    const date = new Date(value);
 
-    if (
-        Number.isNaN(
-            date.getTime()
-        )
-    ) {
+    if (Number.isNaN(date.getTime())) {
         return null;
     }
 
@@ -251,11 +235,12 @@ function localDate(value) {
 
 
 /* =========================
-   BZZOIRO DETAILS
+   BZZOIRO RESOURCES
 ========================= */
 
 async function getEvent(id) {
-    return await safe(
+
+    return safe(
         `/events/${id}/`
     );
 }
@@ -267,7 +252,7 @@ async function getTeam(id) {
         return null;
     }
 
-    return await safe(
+    return safe(
         `/teams/${id}/`
     );
 }
@@ -279,7 +264,7 @@ async function getLeague(id) {
         return null;
     }
 
-    return await safe(
+    return safe(
         `/leagues/${id}/`
     );
 }
@@ -311,7 +296,11 @@ function poisson(
 }
 
 
-function scoreMatrix(
+/* =========================
+   SCORE MATRIX
+========================= */
+
+function makeScores(
     homeXG,
     awayXG
 ) {
@@ -332,9 +321,9 @@ function scoreMatrix(
 
             scores.push({
 
-                home: home,
+                home,
 
-                away: away,
+                away,
 
                 probability:
                     poisson(
@@ -345,7 +334,6 @@ function scoreMatrix(
                         awayXG,
                         away
                     )
-
             });
         }
     }
@@ -358,7 +346,11 @@ function scoreMatrix(
 }
 
 
-function resultProbabilities(
+/* =========================
+   RESULT PROBABILITIES
+========================= */
+
+function getResultProbabilities(
     scores
 ) {
 
@@ -366,30 +358,25 @@ function resultProbabilities(
     let draw = 0;
     let away = 0;
 
-    for (
-        const score of scores
-    ) {
+    for (const score of scores) {
 
         if (
             score.home >
             score.away
         ) {
 
-            home +=
-                score.probability;
+            home += score.probability;
 
         } else if (
             score.home ===
             score.away
         ) {
 
-            draw +=
-                score.probability;
+            draw += score.probability;
 
         } else {
 
-            away +=
-                score.probability;
+            away += score.probability;
         }
     }
 
@@ -412,7 +399,11 @@ function resultProbabilities(
 }
 
 
-function percent(value) {
+/* =========================
+   PERCENTAGE
+========================= */
+
+function pct(value) {
 
     return (
         value * 100
@@ -421,7 +412,7 @@ function percent(value) {
 
 
 /* =========================
-   BUILD PREDICTION
+   PREDICTION MODEL
 ========================= */
 
 function buildModel(
@@ -449,7 +440,8 @@ function buildModel(
             [
                 "draw_probability",
                 "draw_prob",
-                "probability_draw"
+                "probability_draw",
+                "draw"
             ]
         );
 
@@ -467,10 +459,9 @@ function buildModel(
         );
 
 
-    /*
-     * Use odds when prediction
-     * probabilities are unavailable.
-     */
+    /* =========================
+       ODDS FALLBACK
+    ========================= */
 
     if (
         home === null ||
@@ -479,17 +470,17 @@ function buildModel(
     ) {
 
         const homeOdds =
-            number(
+            num(
                 odds?.home_win
             );
 
         const drawOdds =
-            number(
+            num(
                 odds?.draw
             );
 
         const awayOdds =
-            number(
+            num(
                 odds?.away_win
             );
 
@@ -500,33 +491,39 @@ function buildModel(
             awayOdds > 0
         ) {
 
-            const h =
+            const homeImplied =
                 1 / homeOdds;
 
-            const d =
+            const drawImplied =
                 1 / drawOdds;
 
-            const a =
+            const awayImplied =
                 1 / awayOdds;
 
             const total =
-                h + d + a;
+                homeImplied +
+                drawImplied +
+                awayImplied;
+
 
             home =
-                h / total;
+                homeImplied /
+                total;
 
             draw =
-                d / total;
+                drawImplied /
+                total;
 
             away =
-                a / total;
+                awayImplied /
+                total;
         }
     }
 
 
-    /*
-     * Last-resort technical fallback.
-     */
+    /* =========================
+       DEFAULT PROBABILITIES
+    ========================= */
 
     if (home === null) {
         home = 0.45;
@@ -541,20 +538,25 @@ function buildModel(
     }
 
 
-    const total =
+    const probabilityTotal =
         home +
         draw +
         away;
 
 
-    home /= total;
-    draw /= total;
-    away /= total;
+    home /=
+        probabilityTotal;
+
+    draw /=
+        probabilityTotal;
+
+    away /=
+        probabilityTotal;
 
 
-    /*
-     * Try to obtain xG.
-     */
+    /* =========================
+       EXPECTED GOALS
+    ========================= */
 
     let homeXG =
         findValue(
@@ -580,9 +582,9 @@ function buildModel(
         );
 
 
-    /*
-     * Estimate xG if unavailable.
-     */
+    /* =========================
+       XG FALLBACK
+    ========================= */
 
     if (
         homeXG === null ||
@@ -631,40 +633,45 @@ function buildModel(
     }
 
 
-    /*
-     * Calculate correct scores.
-     */
+    /* =========================
+       SCORE CALCULATION
+    ========================= */
 
     const scores =
-        scoreMatrix(
+        makeScores(
             homeXG,
             awayXG
         );
 
 
     const results =
-        resultProbabilities(
+        getResultProbabilities(
             scores
         );
 
 
+    /* =========================
+       TOP CORRECT SCORES
+    ========================= */
+
     const topScores =
         scores
             .slice(0, 5)
-            .map(
-                score => ({
+            .map(score => ({
 
-                    score:
-                        `${score.home}-${score.away}`,
+                score:
+                    `${score.home}-${score.away}`,
 
-                    probability:
-                        percent(
-                            score.probability
-                        )
+                probability:
+                    pct(
+                        score.probability
+                    )
+            }));
 
-                })
-            );
 
+    /* =========================
+       WINNER
+    ========================= */
 
     let winner =
         "Draw";
@@ -692,6 +699,10 @@ function buildModel(
     }
 
 
+    /* =========================
+       FINAL MODEL
+    ========================= */
+
     return {
 
         prediction:
@@ -699,7 +710,7 @@ function buildModel(
             "N/A",
 
         confidence:
-            percent(
+            pct(
                 Math.max(
                     results.home,
                     results.draw,
@@ -718,7 +729,6 @@ function buildModel(
                 Number(
                     awayXG.toFixed(2)
                 )
-
         },
 
         predictedWinner:
@@ -727,20 +737,19 @@ function buildModel(
         resultProbabilities: {
 
             homeWin:
-                percent(
+                pct(
                     results.home
                 ),
 
             draw:
-                percent(
+                pct(
                     results.draw
                 ),
 
             awayWin:
-                percent(
+                pct(
                     results.away
                 )
-
         },
 
         topCorrectScores:
@@ -808,34 +817,28 @@ app.get(
                             let home =
                                 typeof item.home_team ===
                                 "object"
-
                                     ? item.home_team
-
                                     : null;
 
 
                             let away =
                                 typeof item.away_team ===
                                 "object"
-
                                     ? item.away_team
-
                                     : null;
 
 
-                            let lg =
+                            let league =
                                 typeof item.league ===
                                 "object"
-
                                     ? item.league
-
                                     : null;
 
 
                             if (
                                 !home?.name ||
                                 !away?.name ||
-                                !lg?.name
+                                !league?.name
                             ) {
 
                                 const details =
@@ -854,9 +857,9 @@ app.get(
                                     away;
 
 
-                                lg =
+                                league =
                                     details?.league ||
-                                    lg;
+                                    league;
                             }
 
 
@@ -885,14 +888,14 @@ app.get(
 
 
                             if (
-                                !lg?.name
+                                !league?.name
                             ) {
 
-                                lg =
+                                league =
                                     await getLeague(
                                         item.league_id
                                     ) ||
-                                    lg;
+                                    league;
                             }
 
 
@@ -916,7 +919,7 @@ app.get(
 
 
                             const leagueId =
-                                lg?.id ||
+                                league?.id ||
                                 item.league_id ||
                                 null;
 
@@ -938,26 +941,27 @@ app.get(
                                     item.status ||
                                     "notstarted",
 
+
                                 league: {
 
                                     id:
                                         leagueId,
 
                                     name:
-                                        lg?.name ||
+                                        league?.name ||
                                         "Unknown League",
 
                                     country:
-                                        lg?.country ||
-                                        lg?.country_name ||
+                                        league?.country ||
+                                        league?.country_name ||
                                         null,
 
                                     logo:
                                         leagueId
                                             ? `${IMG}/league/${leagueId}/`
                                             : null
-
                                 },
+
 
                                 home: {
 
@@ -972,8 +976,8 @@ app.get(
                                         homeId
                                             ? `${IMG}/team/${homeId}/`
                                             : null
-
                                 },
+
 
                                 away: {
 
@@ -988,8 +992,8 @@ app.get(
                                         awayId
                                             ? `${IMG}/team/${awayId}/`
                                             : null
-
                                 },
+
 
                                 score: {
 
@@ -1016,43 +1020,4 @@ app.get(
                     )
                     .sort(
                         (a, b) =>
-                            new Date(
-                                a.date || 0
-                            ) -
-                            new Date(
-                                b.date || 0
-                            )
-                    );
-
-
-            res.json({
-
-                success:
-                    true,
-
-                provider:
-                    "Bzzoiro Sports Data",
-
-                date:
-                    date,
-
-                timezone:
-                    "Africa/Lagos",
-
-                count:
-                    filtered.length,
-
-                fixtures:
-                    filtered
-            });
-
-
-        } catch (error) 
-           } catch (error) {
-    console.error("Fixtures error:", error);
-
-    res.status(500).json({
-        success: false,
-        message: error.message
-    });
-   }
+                            new Dat
