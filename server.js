@@ -1047,11 +1047,12 @@ app.get(
             });
 
 
-        } catch (error) {
+        } catch (error) 
+           } catch (error) {
     console.error("Fixtures error:", error);
 
     res.status(500).json({
         success: false,
         message: error.message
     });
-        }
+   }
