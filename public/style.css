@@ -356,3 +356,310 @@ button {
     }
 
     }
+/* =========================================================
+   SPORTYBET DAILY PICKS
+========================================================= */
+
+.daily-picks-section {
+    width: 100%;
+    margin: 25px 0;
+}
+
+.daily-picks-header {
+    margin-bottom: 15px;
+}
+
+.daily-picks-label {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 800;
+    letter-spacing: 1px;
+    margin-bottom: 5px;
+}
+
+.daily-picks-header h2 {
+    margin: 0 0 5px;
+    font-size: 25px;
+}
+
+.daily-picks-header p {
+    margin: 0;
+    opacity: 0.7;
+}
+
+
+/* =========================================================
+   DISCLAIMER
+========================================================= */
+
+.daily-picks-disclaimer {
+    display: flex;
+    gap: 10px;
+    align-items: flex-start;
+    padding: 12px;
+    margin: 15px 0;
+    border-radius: 10px;
+    background: rgba(255,255,255,0.06);
+    font-size: 13px;
+}
+
+.daily-picks-disclaimer p {
+    margin: 0;
+    line-height: 1.5;
+}
+
+
+/* =========================================================
+   SLIP GRID
+========================================================= */
+
+.daily-slip-grid {
+    display: grid;
+    grid-template-columns:
+        repeat(
+            auto-fit,
+            minmax(
+                280px,
+                1fr
+            )
+        );
+
+    gap: 18px;
+}
+
+
+/* =========================================================
+   SLIP CARD
+========================================================= */
+
+.daily-slip-card {
+    border-radius: 16px;
+    padding: 18px;
+    background: rgba(255,255,255,0.05);
+    border: 1px solid rgba(255,255,255,0.10);
+    box-shadow:
+        0 8px 25px
+        rgba(0,0,0,0.12);
+}
+
+
+/* =========================================================
+   SLIP HEADER
+========================================================= */
+
+.slip-header {
+    display: flex;
+    justify-content: space-between;
+    gap: 12px;
+    align-items: flex-start;
+    margin-bottom: 15px;
+}
+
+.slip-type {
+    display: block;
+    font-weight: 800;
+    margin-bottom: 4px;
+}
+
+.slip-header h3 {
+    margin: 0;
+    font-size: 17px;
+}
+
+.slip-target {
+    white-space: nowrap;
+    font-size: 12px;
+    font-weight: 700;
+    opacity: 0.8;
+}
+
+
+/* =========================================================
+   SUMMARY
+========================================================= */
+
+.slip-summary {
+    display: grid;
+    grid-template-columns:
+        1fr 1fr;
+
+    gap: 10px;
+    margin-bottom: 15px;
+}
+
+.slip-summary div {
+    padding: 12px;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.12);
+}
+
+.slip-summary span {
+    display: block;
+    font-size: 11px;
+    opacity: 0.65;
+    margin-bottom: 4px;
+}
+
+.slip-summary strong {
+    font-size: 20px;
+}
+
+
+/* =========================================================
+   SELECTION
+========================================================= */
+
+.slip-selections {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.slip-selection {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    padding: 11px;
+    border-radius: 10px;
+    background: rgba(0,0,0,0.10);
+}
+
+.selection-number {
+    min-width: 25px;
+    height: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+    font-size: 11px;
+    font-weight: 800;
+    background: rgba(255,255,255,0.10);
+}
+
+.selection-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.selection-info strong {
+    display: block;
+    font-size: 13px;
+    margin-bottom: 3px;
+}
+
+.selection-info span {
+    display: block;
+    font-size: 12px;
+    font-weight: 700;
+}
+
+.selection-info small {
+    display: block;
+    margin-top: 3px;
+    font-size: 10px;
+    opacity: 0.55;
+}
+
+.selection-odds {
+    font-size: 14px;
+    font-weight: 900;
+}
+
+
+/* =========================================================
+   ACTION
+========================================================= */
+
+.slip-actions {
+    margin-top: 15px;
+}
+
+.copy-slip-btn {
+    width: 100%;
+    padding: 12px;
+    border: 0;
+    border-radius: 10px;
+    cursor: pointer;
+    font-weight: 800;
+    font-size: 14px;
+}
+
+
+/* =========================================================
+   NOTE
+========================================================= */
+
+.slip-note {
+    margin-top: 12px;
+    font-size: 11px;
+    line-height: 1.5;
+    opacity: 0.65;
+}
+
+
+/* =========================================================
+   EMPTY / LOADING
+========================================================= */
+
+.slip-empty,
+.daily-picks-loading,
+.daily-picks-error {
+    padding: 25px;
+    text-align: center;
+    border-radius: 15px;
+    background: rgba(255,255,255,0.05);
+}
+
+.slip-empty h3,
+.daily-picks-loading h3,
+.daily-picks-error h3 {
+    margin-top: 0;
+}
+
+
+/* =========================================================
+   COPY MESSAGE
+========================================================= */
+
+.copy-message {
+    position: fixed;
+    left: 50%;
+    bottom: 25px;
+    transform: translateX(-50%);
+    z-index: 9999;
+
+    padding: 12px 18px;
+
+    border-radius: 10px;
+
+    background: #111;
+    color: #fff;
+
+    font-size: 13px;
+    font-weight: 700;
+
+    box-shadow:
+        0 8px 30px
+        rgba(0,0,0,0.25);
+}
+
+
+/* =========================================================
+   MOBILE
+========================================================= */
+
+@media (max-width: 600px) {
+
+    .daily-picks-header h2 {
+        font-size: 21px;
+    }
+
+    .slip-header {
+        flex-direction: column;
+    }
+
+    .slip-target {
+        white-space: normal;
+    }
+
+    }
