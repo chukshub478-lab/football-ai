@@ -2554,10 +2554,261 @@ DAILY BETTING PICKS
 */
 
 app.get("/api/daily-picks", async (req, res) => {
-
     try {
+        const today = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Africa/Lagos",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit"
+        }).format(new Date());
 
-        const today = nigeriaDate();
+        if (!KEY) {
+            throw new Error("BZZOIRO_API_KEY is missing.");
+        }
+
+        async function dailyFetch(endpoint) {
+            const response = await fetch(API + endpoint, {
+                headers: {
+                    Authorization: `Token ${KEY}`,
+                    Accept: "application/json"
+                }
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(
+                    `Bzzoiro API ${response.status}: ${JSON.stringify(data)}`
+                );
+            }
+
+            return data;
+        }
+
+        const eventsData = await dailyFetch(
+            `/events/?date_from=${today}&date_to=${today}&limit=200`
+        );
+
+        const events = Array.isArray(eventsData.results)
+            ? eventsData.results
+            : [];
+
+        const candidates = [];
+
+        for (const event of events.slice(0, 30)) {
+            try {
+                const eventId = event.id;
+
+                if (!eventId) continue;
+
+                const status = String(
+                    event.status || event.state || ""
+                ).toLowerCase();
+
+                if (
+                    status.includes("finished") ||
+                    status.includes("live") ||
+                    status.includes("cancelled") ||
+                    status.includes("postponed")
+                ) {
+                    continue;
+                }
+
+                const details = await dailyFetch(
+                    `/events/${eventId}/`
+                );
+
+                const prediction = await dailyFetch(
+                    `/events/${eventId}/prediction/`
+                ).catch(() => null);
+
+                const odds = await dailyFetch(
+                    `/events/${eventId}/odds/`
+                ).catch(() => null);
+
+                const home =
+                    typeof details.home_team === "object"
+                        ? details.home_team.name
+                        : details.home_team ||
+                          event.home_team?.name ||
+                          "Home Team";
+
+                const away =
+                    typeof details.away_team === "object"
+                        ? details.away_team.name
+                        : details.away_team ||
+                          event.away_team?.name ||
+                          "Away Team";
+
+                const league =
+                    typeof details.league === "object"
+                        ? details.league.name
+                        : details.league ||
+                          event.league?.name ||
+                          "Unknown League";
+
+                const homeProb =
+                    Number(
+                        prediction?.home_win_probability ??
+                        prediction?.home_probability ??
+                        prediction?.probabilities?.home ??
+                        0
+                    ) || 0;
+
+                const drawProb =
+                    Number(
+                        prediction?.draw_probability ??
+                        prediction?.probabilities?.draw ??
+                        0
+                    ) || 0;
+
+                const awayProb =
+                    Number(
+                        prediction?.away_win_probability ??
+                        prediction?.away_probability ??
+                        prediction?.probabilities?.away ??
+                        0
+                    ) || 0;
+
+                const normalise = value => {
+                    if (value > 1 && value <= 100) {
+                        return value / 100;
+                    }
+
+                    return value;
+                };
+
+                const hp = normalise(homeProb);
+                const dp = normalise(drawProb);
+                const ap = normalise(awayProb);
+
+                if (hp >= 0.60) {
+                    candidates.push({
+                        eventId,
+                        home,
+                        away,
+                        league,
+                        market: "Home Win",
+                        probability: hp,
+                        odds: 1.60
+                    });
+                }
+
+                if (dp >= 0.38) {
+                    candidates.push({
+                        eventId,
+                        home,
+                        away,
+                        league,
+                        market: "Draw",
+                        probability: dp,
+                        odds: 2.80
+                    });
+                }
+
+                if (ap >= 0.60) {
+                    candidates.push({
+                        eventId,
+                        home,
+                        away,
+                        league,
+                        market: "Away Win",
+                        probability: ap,
+                        odds: 1.60
+                    });
+                }
+
+            } catch (matchError) {
+                console.error(
+                    "Daily pick error:",
+                    matchError.message
+                );
+            }
+        }
+
+        candidates.sort(
+            (a, b) => b.probability - a.probability
+        );
+
+        function createSlip(minOdds, maxOdds, maxSelections) {
+            const selections = [];
+            const usedEvents = new Set();
+            const usedLeagues = new Set();
+
+            let totalOdds = 1;
+
+            for (const pick of candidates) {
+                if (selections.length >= maxSelections) break;
+
+                if (usedEvents.has(pick.eventId)) continue;
+
+                if (
+                    usedLeagues.has(pick.league) &&
+                    usedLeagues.size < 3
+                ) {
+                    continue;
+                }
+
+                const nextOdds = totalOdds * pick.odds;
+
+                if (nextOdds > maxOdds) continue;
+
+                selections.push(pick);
+                usedEvents.add(pick.eventId);
+                usedLeagues.add(pick.league);
+                totalOdds = nextOdds;
+
+                if (totalOdds >= minOdds) break;
+            }
+
+            return {
+                selections,
+                totalOdds: Number(totalOdds.toFixed(2))
+            };
+        }
+
+        const safeSlip = createSlip(5, 7, 6);
+        const balancedSlip = createSlip(7, 10, 7);
+
+        res.json({
+            success: true,
+            provider: "Bzzoiro Sports Data",
+            date: today,
+            timezone: "Africa/Lagos",
+
+            slips: {
+                safe: {
+                    title: "5-7 Odds Model Slip",
+                    targetOdds: "5.00 - 7.00",
+                    ...safeSlip,
+                    bookingCode: null,
+                    bookingStatus:
+                        "Pending SportyBet booking"
+                },
+
+                balanced: {
+                    title: "7-10 Odds Model Slip",
+                    targetOdds: "7.00 - 10.00",
+                    ...balancedSlip,
+                    bookingCode: null,
+                    bookingStatus:
+                        "Pending SportyBet booking"
+                }
+            },
+
+            disclaimer:
+                "These are statistical selections, not guaranteed outcomes. Odds and match conditions change."
+        });
+
+    } catch (error) {
+        console.error("Daily Picks Error:", error);
+
+        res.status(500).json({
+            success: false,
+            message: error.message || "Unable to build daily picks."
+        });
+    }
+});
 
         /*
         ---------------------------------------------------
