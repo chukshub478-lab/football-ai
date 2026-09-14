@@ -1,27 +1,65 @@
 let allFixtures = [];
 
-const fixturesSection = document.getElementById("fixtures");
-const loadingSection = document.getElementById("loading");
-const emptySection = document.getElementById("empty");
-const errorSection = document.getElementById("error");
-const analysisSection = document.getElementById("analysis");
-const leagueFilter = document.getElementById("leagueFilter");
+const fixturesSection =
+    document.getElementById("fixtures");
 
+const loadingSection =
+    document.getElementById("loading");
+
+const emptySection =
+    document.getElementById("empty");
+
+const errorSection =
+    document.getElementById("error");
+
+const analysisSection =
+    document.getElementById("analysis");
+
+const leagueFilter =
+    document.getElementById("leagueFilter");
+
+
+/*
+===========================================================
+SPORTYBET DAILY PICKS
+===========================================================
+*/
+
+let dailyPicksLoaded = false;
+
+
+/*
+===========================================================
+LOAD FIXTURES
+===========================================================
+*/
 
 async function loadFixtures() {
 
     try {
 
-        loadingSection.style.display = "block";
-        fixturesSection.innerHTML = "";
-        emptySection.style.display = "none";
-        errorSection.style.display = "none";
+        loadingSection.style.display =
+            "block";
+
+        fixturesSection.innerHTML =
+            "";
+
+        emptySection.style.display =
+            "none";
+
+        errorSection.style.display =
+            "none";
+
 
         const response =
-            await fetch("/api/fixtures");
+            await fetch(
+                "/api/fixtures"
+            );
+
 
         const data =
             await response.json();
+
 
         if (!data.success) {
 
@@ -31,54 +69,643 @@ async function loadFixtures() {
             );
         }
 
+
         allFixtures =
             data.fixtures || [];
 
+
         loadingSection.style.display =
             "none";
+
 
         setupLeagueFilter(
             allFixtures
         );
 
+
         displayFixtures(
             allFixtures
         );
+
+
+        /*
+        ----------------------------------------------------
+        Load SportyBet picks after fixtures
+        ----------------------------------------------------
+        */
+
+        loadDailyPicks();
+
 
     } catch (error) {
 
         console.error(error);
 
+
         loadingSection.style.display =
             "none";
+
 
         errorSection.style.display =
             "block";
 
+
         errorSection.innerHTML = `
             <div class="error-box">
-                <h3>Unable to load matches</h3>
-                <p>${escapeHTML(error.message)}</p>
-                <button onclick="loadFixtures()">
+
+                <h3>
+                    Unable to load matches
+                </h3>
+
+                <p>
+                    ${escapeHTML(
+                        error.message
+                    )}
+                </p>
+
+                <button
+                    onclick="loadFixtures()"
+                >
                     Try Again
                 </button>
+
             </div>
         `;
     }
 }
 
 
-/* =========================
-   LEAGUE FILTER
-========================= */
+/*
+===========================================================
+LOAD DAILY SPORTYBET PICKS
+===========================================================
+*/
 
-function setupLeagueFilter(fixtures) {
+async function loadDailyPicks() {
 
-    if (!leagueFilter) {
+    const container =
+        document.getElementById(
+            "dailyPicks"
+        );
+
+
+    /*
+    -------------------------------------------------------
+    If the HTML section does not exist,
+    do nothing.
+    -------------------------------------------------------
+    */
+
+    if (!container) {
+
         return;
     }
 
+
+    container.innerHTML = `
+        <div class="daily-picks-loading">
+
+            <h3>
+                🔄 Building Today's Picks
+            </h3>
+
+            <p>
+                Analyzing today's fixtures,
+                markets and available odds...
+            </p>
+
+        </div>
+    `;
+
+
+    try {
+
+        const response =
+            await fetch(
+                "/api/daily-picks"
+            );
+
+
+        const data =
+            await response.json();
+
+
+        if (!data.success) {
+
+            throw new Error(
+                data.message ||
+                "Unable to generate daily picks."
+            );
+        }
+
+
+        dailyPicksLoaded =
+            true;
+
+
+        renderDailyPicks(
+            data
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            "Daily picks error:",
+            error
+        );
+
+
+        container.innerHTML = `
+            <div class="daily-picks-error">
+
+                <h3>
+                    ⚠️ Daily Picks Unavailable
+                </h3>
+
+                <p>
+                    ${escapeHTML(
+                        error.message
+                    )}
+                </p>
+
+                <button
+                    onclick="loadDailyPicks()"
+                >
+                    Try Again
+                </button>
+
+            </div>
+        `;
+    }
+}
+
+
+/*
+===========================================================
+RENDER DAILY PICKS
+===========================================================
+*/
+
+function renderDailyPicks(
+    data
+) {
+
+    const container =
+        document.getElementById(
+            "dailyPicks"
+        );
+
+
+    if (!container) {
+
+        return;
+    }
+
+
+    const safeSlip =
+        data.slips?.safe || null;
+
+
+    const balancedSlip =
+        data.slips?.balanced || null;
+
+
+    container.innerHTML = `
+
+        <div class="daily-picks-header">
+
+            <div>
+
+                <span class="daily-picks-label">
+                    ⚽ SPORTYBET
+                </span>
+
+                <h2>
+                    🔥 Today's Daily Picks
+                </h2>
+
+                <p>
+                    Statistical selections for
+                    ${escapeHTML(
+                        data.date || "today"
+                    )}
+                </p>
+
+            </div>
+
+        </div>
+
+
+        <div class="daily-picks-disclaimer">
+
+            <span>
+                ℹ️
+            </span>
+
+            <p>
+                These are statistical selections,
+                not guaranteed wins. Always check
+                the final odds before placing a bet.
+            </p>
+
+        </div>
+
+
+        <div class="daily-slip-grid">
+
+            ${renderSlipCard(
+                safeSlip,
+                "safe"
+            )}
+
+            ${renderSlipCard(
+                balancedSlip,
+                "balanced"
+            )}
+
+        </div>
+
+    `;
+}
+
+
+/*
+===========================================================
+RENDER SINGLE SLIP
+===========================================================
+*/
+
+function renderSlipCard(
+    slip,
+    type
+) {
+
+    if (!slip) {
+
+        return `
+            <div class="daily-slip-card">
+
+                <div class="slip-empty">
+
+                    <h3>
+                        No ${type === "safe"
+                            ? "Safe"
+                            : "Balanced"}
+                        Slip Available
+                    </h3>
+
+                    <p>
+                        There are not enough
+                        suitable selections today.
+                    </p>
+
+                </div>
+
+            </div>
+        `;
+    }
+
+
+    const isSafe =
+        type === "safe";
+
+
+    const title =
+        isSafe
+            ? "🟢 Safe Slip"
+            : "🔵 Balanced Slip";
+
+
+    const target =
+        isSafe
+            ? "5.00 – 7.00 Odds"
+            : "8.00 – 10.00 Odds";
+
+
+    return `
+        <div class="daily-slip-card">
+
+            <div class="slip-header">
+
+                <div>
+
+                    <span class="slip-type">
+                        ${title}
+                    </span>
+
+                    <h3>
+                        SportyBet Daily Pick
+                    </h3>
+
+                </div>
+
+                <div class="slip-target">
+                    ${target}
+                </div>
+
+            </div>
+
+
+            <div class="slip-summary">
+
+                <div>
+                    <span>
+                        Selections
+                    </span>
+
+                    <strong>
+                        ${slip.selections?.length || 0}
+                    </strong>
+                </div>
+
+
+                <div>
+                    <span>
+                        Total Odds
+                    </span>
+
+                    <strong>
+                        ${escapeHTML(
+                            slip.totalOdds ||
+                            "N/A"
+                        )}
+                    </strong>
+                </div>
+
+            </div>
+
+
+            <div class="slip-selections">
+
+                ${
+                    (slip.selections || [])
+                        .map(
+                            (
+                                selection,
+                                index
+                            ) =>
+                                renderSelection(
+                                    selection,
+                                    index
+                                )
+                        )
+                        .join("")
+                }
+
+            </div>
+
+
+            <div class="slip-actions">
+
+                <button
+                    class="copy-slip-btn"
+                    onclick='copySlip(${JSON.stringify(
+                        slip
+                    )})'
+                >
+                    📋 Copy Bet Slip
+                </button>
+
+            </div>
+
+
+            <div class="slip-note">
+
+                SportyBet booking code:
+                <strong>
+                    Generate from the final
+                    SportyBet slip.
+                </strong>
+
+            </div>
+
+        </div>
+    `;
+}
+
+
+/*
+===========================================================
+RENDER SELECTION
+===========================================================
+*/
+
+function renderSelection(
+    selection,
+    index
+) {
+
+    return `
+        <div class="slip-selection">
+
+            <div class="selection-number">
+                ${index + 1}
+            </div>
+
+
+            <div class="selection-info">
+
+                <strong>
+                    ${escapeHTML(
+                        selection.home ||
+                        "Home"
+                    )}
+
+                    vs
+
+                    ${escapeHTML(
+                        selection.away ||
+                        "Away"
+                    )}
+                </strong>
+
+
+                <span>
+                    ${escapeHTML(
+                        selection.market ||
+                        "Market"
+                    )}
+                </span>
+
+
+                ${
+                    selection.league
+                        ? `
+                            <small>
+                                ${escapeHTML(
+                                    selection.league
+                                )}
+                            </small>
+                          `
+                        : ""
+                }
+
+            </div>
+
+
+            <div class="selection-odds">
+
+                ${escapeHTML(
+                    selection.odds ||
+                    "N/A"
+                )}
+
+            </div>
+
+        </div>
+    `;
+}
+
+
+/*
+===========================================================
+COPY BET SLIP
+===========================================================
+*/
+
+async function copySlip(
+    slip
+) {
+
+    if (!slip) {
+
+        return;
+    }
+
+
+    const selections =
+        slip.selections || [];
+
+
+    let text =
+        "SPORTYBET DAILY PICK\n\n";
+
+
+    selections.forEach(
+        (
+            selection,
+            index
+        ) => {
+
+            text +=
+                `${index + 1}. `;
+
+            text +=
+                `${selection.home} vs `;
+
+            text +=
+                `${selection.away}\n`;
+
+            text +=
+                `${selection.market}`;
+
+            text +=
+                ` @ ${selection.odds}\n\n`;
+        }
+    );
+
+
+    text +=
+        `TOTAL ODDS: ${slip.totalOdds}\n`;
+
+
+    try {
+
+        await navigator.clipboard.writeText(
+            text
+        );
+
+
+        showCopyMessage(
+            "Bet slip copied successfully."
+        );
+
+
+    } catch (error) {
+
+        console.error(
+            error
+        );
+
+
+        showCopyMessage(
+            "Unable to copy automatically."
+        );
+    }
+}
+
+
+/*
+===========================================================
+COPY MESSAGE
+===========================================================
+*/
+
+function showCopyMessage(
+    message
+) {
+
+    const existing =
+        document.querySelector(
+            ".copy-message"
+        );
+
+
+    if (existing) {
+
+        existing.remove();
+    }
+
+
+    const element =
+        document.createElement(
+            "div"
+        );
+
+
+    element.className =
+        "copy-message";
+
+
+    element.textContent =
+        message;
+
+
+    document.body.appendChild(
+        element
+    );
+
+
+    setTimeout(
+        () => {
+
+            element.remove();
+
+        },
+        2500
+    );
+}
+
+
+/*
+===========================================================
+LEAGUE FILTER
+===========================================================
+*/
+
+function setupLeagueFilter(
+    fixtures
+) {
+
+    if (!leagueFilter) {
+
+        return;
+    }
+
+
     const leagues = [];
+
 
     fixtures.forEach(
         fixture => {
@@ -86,22 +713,29 @@ function setupLeagueFilter(fixtures) {
             const name =
                 fixture.league?.name;
 
+
             if (
                 name &&
-                !leagues.includes(name)
+                !leagues.includes(
+                    name
+                )
             ) {
+
                 leagues.push(name);
             }
         }
     );
 
+
     leagues.sort();
+
 
     leagueFilter.innerHTML = `
         <option value="all">
             All Leagues
         </option>
     `;
+
 
     leagues.forEach(
         league => {
@@ -111,11 +745,14 @@ function setupLeagueFilter(fixtures) {
                     "option"
                 );
 
+
             option.value =
                 league;
 
+
             option.textContent =
                 league;
+
 
             leagueFilter.appendChild(
                 option
@@ -125,9 +762,11 @@ function setupLeagueFilter(fixtures) {
 }
 
 
-/* =========================
-   FILTER CHANGE
-========================= */
+/*
+===========================================================
+FILTER CHANGE
+===========================================================
+*/
 
 if (leagueFilter) {
 
@@ -137,6 +776,7 @@ if (leagueFilter) {
 
             const selected =
                 leagueFilter.value;
+
 
             if (
                 selected === "all"
@@ -149,12 +789,14 @@ if (leagueFilter) {
                 return;
             }
 
+
             const filtered =
                 allFixtures.filter(
                     fixture =>
                         fixture.league?.name ===
                         selected
                 );
+
 
             displayFixtures(
                 filtered
@@ -164,18 +806,19 @@ if (leagueFilter) {
 }
 
 
-/* =========================
-   DISPLAY FIXTURES
-========================= */
+/*
+===========================================================
+DISPLAY FIXTURES
+===========================================================
+*/
 
-function displayFixtures(fixtures) {
+function displayFixtures(
+    fixtures
+) {
 
-    fixturesSection.innerHTML = "";
+    fixturesSection.innerHTML =
+        "";
 
-    /*
-     * Only show matches that are
-     * upcoming or currently live.
-     */
 
     const availableFixtures =
         fixtures.filter(
@@ -187,6 +830,7 @@ function displayFixtures(fixtures) {
                         ""
                     ).toLowerCase();
 
+
                 return (
                     status === "notstarted" ||
                     status === "upcoming" ||
@@ -194,28 +838,37 @@ function displayFixtures(fixtures) {
                     status === "2nd_half" ||
                     status === "halftime" ||
                     status === "extra_time" ||
-                    status === "penalty"
+                    status === "penalty" ||
+                    status === "live"
                 );
             }
         );
 
 
     if (
-        availableFixtures.length === 0
+        availableFixtures.length ===
+        0
     ) {
 
         emptySection.style.display =
             "block";
 
+
         emptySection.innerHTML = `
             <div class="empty-box">
-                <h3>No available matches</h3>
+
+                <h3>
+                    No available matches
+                </h3>
+
                 <p>
                     There are no upcoming or
                     live matches available.
                 </p>
+
             </div>
         `;
+
 
         return;
     }
@@ -233,6 +886,7 @@ function displayFixtures(fixtures) {
                     "div"
                 );
 
+
             card.className =
                 "fixture-card";
 
@@ -245,8 +899,10 @@ function displayFixtures(fixtures) {
 
 
             const isLive =
-                status !== "notstarted" &&
-                status !== "upcoming";
+                status !==
+                    "notstarted" &&
+                status !==
+                    "upcoming";
 
 
             const time =
@@ -370,407 +1026,4 @@ function displayFixtures(fixtures) {
 
                         <span>
                             ${escapeHTML(
-                                fixture.away?.name ||
-                                "Away Team"
-                            )}
-                        </span>
-
-                    </div>
-
-                </div>
-
-
-                ${
-                    isLive
-                        ? `
-                            <div class="live-score">
-                                Current Score:
-                                <strong>
-                                    ${fixture.score?.home ?? 0}
-                                    -
-                                    ${fixture.score?.away ?? 0}
-                                </strong>
-                            </div>
-                          `
-                        : `
-                            <button
-                                class="analyze-btn"
-                                onclick="analyzeMatch(${fixture.id})"
-                            >
-                                🔍 Analyze Match
-                            </button>
-                          `
-                }
-
-            `;
-
-            fixturesSection.appendChild(
-                card
-            );
-        }
-    );
-}
-
-
-/* =========================
-   MATCH TIME
-========================= */
-
-function formatMatchTime(dateString) {
-
-    if (!dateString) {
-        return "Time unavailable";
-    }
-
-    const date =
-        new Date(dateString);
-
-    return new Intl.DateTimeFormat(
-        "en-NG",
-        {
-            timeZone:
-                "Africa/Lagos",
-
-            hour:
-                "2-digit",
-
-            minute:
-                "2-digit",
-
-            hour12:
-                true
-        }
-    ).format(date);
-}
-
-
-/* =========================
-   ANALYZE MATCH
-========================= */
-
-async function analyzeMatch(
-    fixtureId
-) {
-
-    try {
-
-        analysisSection.style.display =
-            "block";
-
-        analysisSection.innerHTML = `
-            <div class="analysis-loading">
-                <h3>Analyzing Match...</h3>
-                <p>
-                    Collecting team data and
-                    calculating prediction.
-                </p>
-            </div>
-        `;
-
-        const response =
-            await fetch(
-                `/api/fixture/${fixtureId}`
-            );
-
-        const data =
-            await response.json();
-
-        if (!data.success) {
-
-            throw new Error(
-                data.message ||
-                "Analysis failed."
-            );
-        }
-
-        renderAnalysis(
-            data
-        );
-
-        analysisSection.scrollIntoView({
-            behavior: "smooth"
-        });
-
-    } catch (error) {
-
-        console.error(error);
-
-        analysisSection.innerHTML = `
-            <div class="error-box">
-
-                <h3>
-                    Analysis failed
-                </h3>
-
-                <p>
-                    ${escapeHTML(
-                        error.message
-                    )}
-                </p>
-
-                <button
-                    onclick="closeAnalysis()"
-                >
-                    Go Back
-                </button>
-
-            </div>
-        `;
-    }
-}
-
-
-/* =========================
-   RENDER ANALYSIS
-========================= */
-
-function renderAnalysis(data) {
-
-    const model =
-        data.model || {};
-
-    const match =
-        data.match || {};
-
-    const topScores =
-        model.topCorrectScores || [];
-
-
-    analysisSection.innerHTML = `
-
-        <button
-            class="back-btn"
-            onclick="closeAnalysis()"
-        >
-            ← Back to Matches
-        </button>
-
-
-        <div class="analysis-header">
-
-            <h2>
-                ${escapeHTML(
-                    match.home ||
-                    "Home"
-                )}
-
-                vs
-
-                ${escapeHTML(
-                    match.away ||
-                    "Away"
-                )}
-            </h2>
-
-            <p>
-                ${escapeHTML(
-                    match.league ||
-                    ""
-                )}
-            </p>
-
-        </div>
-
-
-        <div class="prediction-main">
-
-            <span>
-                Predicted Correct Score
-            </span>
-
-            <strong>
-                ${escapeHTML(
-                    model.prediction ||
-                    "N/A"
-                )}
-            </strong>
-
-            <small>
-                Model confidence:
-                ${escapeHTML(
-                    model.confidence ||
-                    "N/A"
-                )}
-            </small>
-
-        </div>
-
-
-        <div class="analysis-grid">
-
-            <div class="stat-card">
-
-                <span>
-                    Expected Goals
-                </span>
-
-                <strong>
-                    ${
-                        model.expectedGoals?.home ??
-                        "-"
-                    }
-                    -
-                    ${
-                        model.expectedGoals?.away ??
-                        "-"
-                    }
-                </strong>
-
-            </div>
-
-
-            <div class="stat-card">
-
-                <span>
-                    Predicted Winner
-                </span>
-
-                <strong>
-                    ${escapeHTML(
-                        model.predictedWinner ||
-                        "N/A"
-                    )}
-                </strong>
-
-            </div>
-
-        </div>
-
-
-        <div class="probability-box">
-
-            <h3>
-                Result Probabilities
-            </h3>
-
-            <div>
-                Home:
-                ${
-                    model.resultProbabilities?.homeWin ||
-                    "N/A"
-                }
-            </div>
-
-            <div>
-                Draw:
-                ${
-                    model.resultProbabilities?.draw ||
-                    "N/A"
-                }
-            </div>
-
-            <div>
-                Away:
-                ${
-                    model.resultProbabilities?.awayWin ||
-                    "N/A"
-                }
-            </div>
-
-        </div>
-
-
-        <div class="scores-box">
-
-            <h3>
-                Top Correct Scores
-            </h3>
-
-            ${
-                topScores.length
-                    ? topScores.map(
-                        score => `
-                            <div class="score-row">
-
-                                <span>
-                                    ${escapeHTML(
-                                        score.score
-                                    )}
-                                </span>
-
-                                <strong>
-                                    ${escapeHTML(
-                                        score.probability
-                                    )}
-                                </strong>
-
-                            </div>
-                        `
-                      ).join("")
-                    : `
-                        <p>
-                            No score predictions
-                            available.
-                        </p>
-                      `
-            }
-
-        </div>
-
-    `;
-}
-
-
-/* =========================
-   CLOSE ANALYSIS
-========================= */
-
-function closeAnalysis() {
-
-    analysisSection.style.display =
-        "none";
-
-    window.scrollTo({
-        top: 0,
-        behavior: "smooth"
-    });
-}
-
-
-/* =========================
-   REFRESH
-========================= */
-
-function refreshFixtures() {
-
-    loadFixtures();
-}
-
-
-/* =========================
-   SECURITY
-========================= */
-
-function escapeHTML(value) {
-
-    return String(
-        value ?? ""
-    )
-    .replace(
-        /&/g,
-        "&amp;"
-    )
-    .replace(
-        /</g,
-        "&lt;"
-    )
-    .replace(
-        />/g,
-        "&gt;"
-    )
-    .replace(
-        /"/g,
-        "&quot;"
-    )
-    .replace(
-        /'/g,
-        "&#039;"
-    );
-}
-
-
-/* =========================
-   START APP
-========================= */
-
-loadFixtures();
+                   
