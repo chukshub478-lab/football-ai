@@ -2554,6 +2554,7 @@ DAILY BETTING PICKS
 */
 
 app.get("/api/daily-picks", async (req, res) => {
+    try {
         const date = req.query.date || nigeriaDate();
 
         console.log("Building daily picks for:", date);
