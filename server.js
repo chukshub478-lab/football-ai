@@ -2555,6 +2555,279 @@ DAILY BETTING PICKS
 
 app.get("/api/daily-picks", async (req, res) => {
     try {
+        const date = req.query.date || nigeriaDate();
+
+        console.log("Building daily picks for:", date);
+
+        const eventsData = await api(
+            `/events/?date_from=${date}&date_to=${date}&limit=200`
+        );
+
+        const events = Array.isArray(eventsData?.results)
+            ? eventsData.results
+            : Array.isArray(eventsData)
+            ? eventsData
+            : [];
+
+        if (!events.length) {
+            return res.json({
+                success: true,
+                provider: "Bzzoiro Sports Data",
+                date,
+                timezone: "Africa/Lagos",
+                slips: {
+                    safe: null,
+                    balanced: null
+                },
+                message: "No fixtures found for today."
+            });
+        }
+
+        const candidates = [];
+
+        for (const event of events.slice(0, 25)) {
+            try {
+                const eventId = event.id;
+
+                if (!eventId) continue;
+
+                const status = String(
+                    event.status || event.fixture?.status || ""
+                ).toLowerCase();
+
+                if (
+                    status.includes("finished") ||
+                    status.includes("cancelled") ||
+                    status.includes("postponed")
+                ) {
+                    continue;
+                }
+
+                const [detail, prediction, odds] = await Promise.all([
+                    getEvent(eventId),
+                    safe(`/events/${eventId}/prediction/`),
+                    safe(`/events/${eventId}/odds/`)
+                ]);
+
+                const source = detail || event;
+
+                const home =
+                    source.home_team?.name ||
+                    source.home?.name ||
+                    source.home_team_name ||
+                    event.home_team?.name ||
+                    event.home?.name ||
+                    "Home Team";
+
+                const away =
+                    source.away_team?.name ||
+                    source.away?.name ||
+                    source.away_team_name ||
+                    event.away_team?.name ||
+                    event.away?.name ||
+                    "Away Team";
+
+                const league =
+                    source.league?.name ||
+                    event.league?.name ||
+                    source.competition?.name ||
+                    "Football";
+
+                const predictionSource =
+                    prediction?.prediction ||
+                    prediction?.data ||
+                    prediction ||
+                    {};
+
+                const homeWin =
+                    findValue(
+                        predictionSource,
+                        [
+                            "home_win",
+                            "homeWin",
+                            "home",
+                            "home_probability",
+                            "home_win_probability"
+                        ]
+                    );
+
+                const draw =
+                    findValue(
+                        predictionSource,
+                        [
+                            "draw",
+                            "draw_probability",
+                            "drawProbability"
+                        ]
+                    );
+
+                const awayWin =
+                    findValue(
+                        predictionSource,
+                        [
+                            "away_win",
+                            "awayWin",
+                            "away",
+                            "away_probability",
+                            "away_win_probability"
+                        ]
+                    );
+
+                const probabilities = [
+                    {
+                        market: "Home Win",
+                        probability: homeWin,
+                        side: "home"
+                    },
+                    {
+                        market: "Draw",
+                        probability: draw,
+                        side: "draw"
+                    },
+                    {
+                        market: "Away Win",
+                        probability: awayWin,
+                        side: "away"
+                    }
+                ]
+                    .filter(item => item.probability !== null)
+                    .sort((a, b) => b.probability - a.probability);
+
+                if (!probabilities.length) continue;
+
+                const best = probabilities[0];
+
+                /*
+                 * These are MODEL selections.
+                 * They are not guarantees.
+                 */
+
+                let selectionOdds = 1.60;
+
+                if (best.market === "Draw") {
+                    selectionOdds = 2.80;
+                }
+
+                candidates.push({
+                    eventId,
+                    home,
+                    away,
+                    league,
+                    market: best.market,
+                    odds: selectionOdds,
+                    probability: best.probability
+                });
+
+            } catch (error) {
+                console.error(
+                    "Daily pick error:",
+                    error.message
+                );
+            }
+        }
+
+        /*
+         * Remove duplicate teams.
+         * This keeps the daily slips more diverse.
+         */
+
+        const uniqueCandidates = [];
+
+        for (const pick of candidates) {
+            const duplicate = uniqueCandidates.some(item =>
+                item.eventId === pick.eventId
+            );
+
+            if (!duplicate) {
+                uniqueCandidates.push(pick);
+            }
+        }
+
+        /*
+         * Highest model probability first.
+         */
+
+        uniqueCandidates.sort(
+            (a, b) => b.probability - a.probability
+        );
+
+        function buildSlip(minOdds, maxOdds) {
+            const selections = [];
+            let totalOdds = 1;
+            const leagues = new Set();
+
+            for (const pick of uniqueCandidates) {
+                if (selections.length >= 6) break;
+
+                /*
+                 * Avoid using too many matches
+                 * from the same league.
+                 */
+
+                if (leagues.has(pick.league)) continue;
+
+                const nextOdds = totalOdds * pick.odds;
+
+                if (nextOdds > maxOdds) continue;
+
+                selections.push({
+                    eventId: pick.eventId,
+                    home: pick.home,
+                    away: pick.away,
+                    league: pick.league,
+                    market: pick.market,
+                    odds: pick.odds
+                });
+
+                leagues.add(pick.league);
+                totalOdds = nextOdds;
+
+                if (totalOdds >= minOdds) break;
+            }
+
+            if (
+                totalOdds < minOdds ||
+                selections.length < 2
+            ) {
+                return null;
+            }
+
+            return {
+                selections,
+                totalOdds: Number(totalOdds.toFixed(2)),
+                selectionCount: selections.length,
+                bookingCode: null,
+                bookingStatus:
+                    "Pending. A valid SportyBet booking code must be generated from the final SportyBet bet slip."
+            };
+        }
+
+        const safeSlip = buildSlip(5, 7);
+        const balancedSlip = buildSlip(7, 10);
+
+        return res.json({
+            success: true,
+            provider: "Bzzoiro Sports Data",
+            date,
+            timezone: "Africa/Lagos",
+            slips: {
+                safe: safeSlip,
+                balanced: balancedSlip
+            },
+            disclaimer:
+                "These are model-based selections, not guaranteed outcomes. SportyBet booking codes are not generated by this API."
+        });
+
+    } catch (error) {
+        console.error("Daily Picks error:", error);
+
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
+    try {
         const today = new Intl.DateTimeFormat("en-CA", {
             timeZone: "Africa/Lagos",
             year: "numeric",
