@@ -2555,25 +2555,23 @@ DAILY BETTING PICKS
 
 app.get("/api/daily-picks", async (req, res) => {
     try {
-        const date = req.query.date || nigeriaDate();
+        const today = nigeriaDate();
 
-        console.log("Building daily picks for:", date);
+        console.log("Building Daily Picks for:", today);
 
         const eventsData = await api(
-            `/events/?date_from=${date}&date_to=${date}&limit=200`
+            `/events/?date_from=${today}&date_to=${today}&limit=200`
         );
 
         const events = Array.isArray(eventsData?.results)
             ? eventsData.results
-            : Array.isArray(eventsData)
-            ? eventsData
             : [];
 
         if (!events.length) {
             return res.json({
                 success: true,
                 provider: "Bzzoiro Sports Data",
-                date,
+                date: today,
                 timezone: "Africa/Lagos",
                 slips: {
                     safe: null,
@@ -2587,26 +2585,23 @@ app.get("/api/daily-picks", async (req, res) => {
 
         for (const event of events.slice(0, 25)) {
             try {
-                const eventId = event.id;
-
-                if (!eventId) continue;
+                if (!event.id) continue;
 
                 const status = String(
-                    event.status || event.fixture?.status || ""
+                    event.status || ""
                 ).toLowerCase();
 
                 if (
-                    status.includes("finished") ||
-                    status.includes("cancelled") ||
-                    status.includes("postponed")
+                    status === "finished" ||
+                    status === "cancelled" ||
+                    status === "postponed"
                 ) {
                     continue;
                 }
 
-                const [detail, prediction, odds] = await Promise.all([
-                    getEvent(eventId),
-                    safe(`/events/${eventId}/prediction/`),
-                    safe(`/events/${eventId}/odds/`)
+                const [detail, prediction] = await Promise.all([
+                    getEvent(event.id),
+                    safe(`/events/${event.id}/prediction/`)
                 ]);
 
                 const source = detail || event;
@@ -2614,161 +2609,114 @@ app.get("/api/daily-picks", async (req, res) => {
                 const home =
                     source.home_team?.name ||
                     source.home?.name ||
-                    source.home_team_name ||
                     event.home_team?.name ||
-                    event.home?.name ||
                     "Home Team";
 
                 const away =
                     source.away_team?.name ||
                     source.away?.name ||
-                    source.away_team_name ||
                     event.away_team?.name ||
-                    event.away?.name ||
                     "Away Team";
 
                 const league =
                     source.league?.name ||
                     event.league?.name ||
-                    source.competition?.name ||
                     "Football";
 
-                const predictionSource =
+                const predictionData =
                     prediction?.prediction ||
                     prediction?.data ||
                     prediction ||
                     {};
 
-                const homeWin =
-                    findValue(
-                        predictionSource,
-                        [
-                            "home_win",
-                            "homeWin",
-                            "home",
-                            "home_probability",
-                            "home_win_probability"
-                        ]
-                    );
+                const homeWin = findValue(
+                    predictionData,
+                    [
+                        "home_win",
+                        "homeWin",
+                        "home_probability",
+                        "home_win_probability"
+                    ]
+                );
 
-                const draw =
-                    findValue(
-                        predictionSource,
-                        [
-                            "draw",
-                            "draw_probability",
-                            "drawProbability"
-                        ]
-                    );
+                const draw = findValue(
+                    predictionData,
+                    [
+                        "draw",
+                        "draw_probability",
+                        "drawProbability"
+                    ]
+                );
 
-                const awayWin =
-                    findValue(
-                        predictionSource,
-                        [
-                            "away_win",
-                            "awayWin",
-                            "away",
-                            "away_probability",
-                            "away_win_probability"
-                        ]
-                    );
+                const awayWin = findValue(
+                    predictionData,
+                    [
+                        "away_win",
+                        "awayWin",
+                        "away_probability",
+                        "away_win_probability"
+                    ]
+                );
 
-                const probabilities = [
+                const choices = [
                     {
                         market: "Home Win",
                         probability: homeWin,
-                        side: "home"
+                        odds: 1.60
                     },
                     {
                         market: "Draw",
                         probability: draw,
-                        side: "draw"
+                        odds: 2.80
                     },
                     {
                         market: "Away Win",
                         probability: awayWin,
-                        side: "away"
+                        odds: 1.60
                     }
                 ]
-                    .filter(item => item.probability !== null)
-                    .sort((a, b) => b.probability - a.probability);
+                .filter(item => item.probability !== null)
+                .sort((a, b) => b.probability - a.probability);
 
-                if (!probabilities.length) continue;
+                if (!choices.length) continue;
 
-                const best = probabilities[0];
-
-                /*
-                 * These are MODEL selections.
-                 * They are not guarantees.
-                 */
-
-                let selectionOdds = 1.60;
-
-                if (best.market === "Draw") {
-                    selectionOdds = 2.80;
-                }
+                const best = choices[0];
 
                 candidates.push({
-                    eventId,
+                    eventId: event.id,
                     home,
                     away,
                     league,
                     market: best.market,
-                    odds: selectionOdds,
+                    odds: best.odds,
                     probability: best.probability
                 });
 
             } catch (error) {
                 console.error(
-                    "Daily pick error:",
+                    "Daily Pick Error:",
                     error.message
                 );
             }
         }
 
-        /*
-         * Remove duplicate teams.
-         * This keeps the daily slips more diverse.
-         */
-
-        const uniqueCandidates = [];
-
-        for (const pick of candidates) {
-            const duplicate = uniqueCandidates.some(item =>
-                item.eventId === pick.eventId
-            );
-
-            if (!duplicate) {
-                uniqueCandidates.push(pick);
-            }
-        }
-
-        /*
-         * Highest model probability first.
-         */
-
-        uniqueCandidates.sort(
+        candidates.sort(
             (a, b) => b.probability - a.probability
         );
 
         function buildSlip(minOdds, maxOdds) {
             const selections = [];
-            let totalOdds = 1;
             const leagues = new Set();
+            let totalOdds = 1;
 
-            for (const pick of uniqueCandidates) {
+            for (const pick of candidates) {
                 if (selections.length >= 6) break;
-
-                /*
-                 * Avoid using too many matches
-                 * from the same league.
-                 */
 
                 if (leagues.has(pick.league)) continue;
 
-                const nextOdds = totalOdds * pick.odds;
+                const nextTotal = totalOdds * pick.odds;
 
-                if (nextOdds > maxOdds) continue;
+                if (nextTotal > maxOdds) continue;
 
                 selections.push({
                     eventId: pick.eventId,
@@ -2780,46 +2728,43 @@ app.get("/api/daily-picks", async (req, res) => {
                 });
 
                 leagues.add(pick.league);
-                totalOdds = nextOdds;
+                totalOdds = nextTotal;
 
                 if (totalOdds >= minOdds) break;
             }
 
             if (
-                totalOdds < minOdds ||
-                selections.length < 2
+                selections.length < 2 ||
+                totalOdds < minOdds
             ) {
                 return null;
             }
 
             return {
                 selections,
-                totalOdds: Number(totalOdds.toFixed(2)),
                 selectionCount: selections.length,
+                totalOdds: Number(totalOdds.toFixed(2)),
                 bookingCode: null,
                 bookingStatus:
-                    "Pending. A valid SportyBet booking code must be generated from the final SportyBet bet slip."
+                    "Pending. Generate the final booking code from the SportyBet bet slip."
             };
         }
-
-        const safeSlip = buildSlip(5, 7);
-        const balancedSlip = buildSlip(7, 10);
 
         return res.json({
             success: true,
             provider: "Bzzoiro Sports Data",
-            date,
+            date: today,
             timezone: "Africa/Lagos",
             slips: {
-                safe: safeSlip,
-                balanced: balancedSlip
+                safe: buildSlip(5, 7),
+                balanced: buildSlip(7, 10)
             },
             disclaimer:
-                "These are model-based selections, not guaranteed outcomes. SportyBet booking codes are not generated by this API."
+                "These are model-based selections, not guaranteed outcomes."
         });
 
     } catch (error) {
-        console.error("Daily Picks error:", error);
+        console.error("Daily Picks Error:", error);
 
         return res.status(500).json({
             success: false,
@@ -2827,322 +2772,19 @@ app.get("/api/daily-picks", async (req, res) => {
         });
     }
 });
-    try {
-        const today = new Intl.DateTimeFormat("en-CA", {
-            timeZone: "Africa/Lagos",
-            year: "numeric",
-            month: "2-digit",
-            day: "2-digit"
-        }).format(new Date());
-
-        if (!KEY) {
-            throw new Error("BZZOIRO_API_KEY is missing.");
-        }
-
-        async function dailyFetch(endpoint) {
-            const response = await fetch(API + endpoint, {
-                headers: {
-                    Authorization: `Token ${KEY}`,
-                    Accept: "application/json"
-                }
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(
-                    `Bzzoiro API ${response.status}: ${JSON.stringify(data)}`
-                );
-            }
-
-            return data;
-        }
-
-        const eventsData = await dailyFetch(
-            `/events/?date_from=${today}&date_to=${today}&limit=200`
-        );
-
-        const events = Array.isArray(eventsData.results)
-            ? eventsData.results
-            : [];
-
-        const candidates = [];
-
-        for (const event of events.slice(0, 30)) {
-            try {
-                const eventId = event.id;
-
-                if (!eventId) continue;
-
-                const status = String(
-                    event.status || event.state || ""
-                ).toLowerCase();
-
-                if (
-                    status.includes("finished") ||
-                    status.includes("live") ||
-                    status.includes("cancelled") ||
-                    status.includes("postponed")
-                ) {
-                    continue;
-                }
-
-                const details = await dailyFetch(
-                    `/events/${eventId}/`
-                );
-
-                const prediction = await dailyFetch(
-                    `/events/${eventId}/prediction/`
-                ).catch(() => null);
-
-                const odds = await dailyFetch(
-                    `/events/${eventId}/odds/`
-                ).catch(() => null);
-
-                const home =
-                    typeof details.home_team === "object"
-                        ? details.home_team.name
-                        : details.home_team ||
-                          event.home_team?.name ||
-                          "Home Team";
-
-                const away =
-                    typeof details.away_team === "object"
-                        ? details.away_team.name
-                        : details.away_team ||
-                          event.away_team?.name ||
-                          "Away Team";
-
-                const league =
-                    typeof details.league === "object"
-                        ? details.league.name
-                        : details.league ||
-                          event.league?.name ||
-                          "Unknown League";
-
-                const homeProb =
-                    Number(
-                        prediction?.home_win_probability ??
-                        prediction?.home_probability ??
-                        prediction?.probabilities?.home ??
-                        0
-                    ) || 0;
-
-                const drawProb =
-                    Number(
-                        prediction?.draw_probability ??
-                        prediction?.probabilities?.draw ??
-                        0
-                    ) || 0;
-
-                const awayProb =
-                    Number(
-                        prediction?.away_win_probability ??
-                        prediction?.away_probability ??
-                        prediction?.probabilities?.away ??
-                        0
-                    ) || 0;
-
-                const normalise = value => {
-                    if (value > 1 && value <= 100) {
-                        return value / 100;
-                    }
-
-                    return value;
-                };
-
-                const hp = normalise(homeProb);
-                const dp = normalise(drawProb);
-                const ap = normalise(awayProb);
-
-                if (hp >= 0.60) {
-                    candidates.push({
-                        eventId,
-                        home,
-                        away,
-                        league,
-                        market: "Home Win",
-                        probability: hp,
-                        odds: 1.60
-                    });
-                }
-
-                if (dp >= 0.38) {
-                    candidates.push({
-                        eventId,
-                        home,
-                        away,
-                        league,
-                        market: "Draw",
-                        probability: dp,
-                        odds: 2.80
-                    });
-                }
-
-                if (ap >= 0.60) {
-                    candidates.push({
-                        eventId,
-                        home,
-                        away,
-                        league,
-                        market: "Away Win",
-                        probability: ap,
-                        odds: 1.60
-                    });
-                }
-
-            } catch (matchError) {
-                console.error(
-                    "Daily pick error:",
-                    matchError.message
-                );
-            }
-        }
-
-        candidates.sort(
-            (a, b) => b.probability - a.probability
-        );
-
-        function createSlip(minOdds, maxOdds, maxSelections) {
-            const selections = [];
-            const usedEvents = new Set();
-            const usedLeagues = new Set();
-
-            let totalOdds = 1;
-
-            for (const pick of candidates) {
-                if (selections.length >= maxSelections) break;
-
-                if (usedEvents.has(pick.eventId)) continue;
-
-                if (
-                    usedLeagues.has(pick.league) &&
-                    usedLeagues.size < 3
-                ) {
-                    continue;
-                }
-
-                const nextOdds = totalOdds * pick.odds;
-
-                if (nextOdds > maxOdds) continue;
-
-                selections.push(pick);
-                usedEvents.add(pick.eventId);
-                usedLeagues.add(pick.league);
-                totalOdds = nextOdds;
-
-                if (totalOdds >= minOdds) break;
-            }
-
-            return {
-                selections,
-                totalOdds: Number(totalOdds.toFixed(2))
-            };
-        }
-
-        const safeSlip = createSlip(5, 7, 6);
-        const balancedSlip = createSlip(7, 10, 7);
-
-        res.json({
-            success: true,
-            provider: "Bzzoiro Sports Data",
-            date: today,
-            timezone: "Africa/Lagos",
-
-            slips: {
-                safe: {
-                    title: "5-7 Odds Model Slip",
-                    targetOdds: "5.00 - 7.00",
-                    ...safeSlip,
-                    bookingCode: null,
-                    bookingStatus:
-                        "Pending SportyBet booking"
-                },
-
-                balanced: {
-                    title: "7-10 Odds Model Slip",
-                    targetOdds: "7.00 - 10.00",
-                    ...balancedSlip,
-                    bookingCode: null,
-                    bookingStatus:
-                        "Pending SportyBet booking"
-                }
-            },
-
-            disclaimer:
-                "These are statistical selections, not guaranteed outcomes. Odds and match conditions change."
-        });
-
-    } catch (error) {
-        console.error("Daily Picks Error:", error);
-
-        res.status(500).json({
-            success: false,
-            message: error.message || "Unable to build daily picks."
-        });
-    }
-});
-/*
-===========================================================
-28. BZZOIRO TEST ENDPOINT
-===========================================================
-*/
-
-app.get(
-    "/api/bzzoiro-test",
-    async (req, res) => {
-
-        try {
-
-            const data =
-                await bzzoiroRequest(
-                    "/events/?limit=5"
-                );
-
-
-            res.json({
-
-                success:
-                    true,
-
-                provider:
-                    "Bzzoiro Sports Data",
-
-                message:
-                    "Bzzoiro API connection is working.",
-
-                count:
-                    data.count ??
-                    0,
-
-                results:
-                    data.results ??
-                    []
-            });
-
-
-        } catch (error) {
-
-            console.error(
-                "Bzzoiro test error:",
-                error
-            );
-
-
-            res.status(500).json({
-
-                success:
-                    false,
-
-                provider:
-                    "Bzzoiro Sports Data",
-
-                message:
-                    error.message
-            });
-        }
-    }
-);
+                
+                    
+                        
+                    
+        
+
+                    
+
+                
+                        
+        
+
+                
 
 
 /*
