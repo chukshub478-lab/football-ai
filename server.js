@@ -2559,9 +2559,21 @@ app.get("/api/daily-picks", async (req, res) => {
 
         console.log("Building Daily Picks for:", today);
 
-        const eventsData = await api(
-            `/events/?date_from=${today}&date_to=${today}&limit=200`
-        );
+        const response = await fetch(
+    `https://sports.bzzoiro.com/api/v2/events/?date_from=${today}&date_to=${today}&limit=200`,
+    {
+        headers: {
+            Authorization: `Token ${process.env.BZZOIRO_API_KEY}`,
+            Accept: "application/json"
+        }
+    }
+);
+
+if (!response.ok) {
+    throw new Error(`Bzzoiro API error: HTTP ${response.status}`);
+}
+
+const eventsData = await response.json();
 
         const events = Array.isArray(eventsData?.results)
             ? eventsData.results
