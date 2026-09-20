@@ -2352,63 +2352,35 @@ async function formatFixture(
     -------------------------------------------------------
     */
 
-    if (
-        !home?.name &&
-        item.home_team_id
-    ) {
-
-        home =
-            await getTeam(
-                item.home_team_id
-            ) ||
-            home;
-    }
-
-
-    if (
-        !away?.name &&
-        item.away_team_id
-    ) {
-
-        away =
-            await getTeam(
-                item.away_team_id
-            ) ||
-            away;
-    }
-
-
-    if (
-        !league?.name &&
-        item.league_id
-    ) {
-
-        league =
-            await getLeague(
-                item.league_id
-            ) ||
-            league;
-    }
-
-
     const homeId =
-        getId(home) ||
-        item.home_team_id ||
-        null;
+    home?.id ||
+    item.home_team_id ||
+    item.home_team?.id ||
+    null;
 
+const awayId =
+    away?.id ||
+    item.away_team_id ||
+    item.away_team?.id ||
+    null;
 
-    const awayId =
-        getId(away) ||
-        item.away_team_id ||
-        null;
+const leagueId =
+    league?.id ||
+    item.league_id ||
+    item.league?.id ||
+    null;
 
+if (!home?.name || home.name === "Home Team") {
+    home = await getTeam(homeId) || home;
+}
 
-    const leagueId =
-        getId(league) ||
-        item.league_id ||
-        null;
+if (!away?.name || away.name === "Away Team") {
+    away = await getTeam(awayId) || away;
+}
 
-
+if (!league?.name || league.name === "Unknown League") {
+    league = await getLeague(leagueId) || league;
+}
     const date =
         item.event_date ||
         item.start_time ||
