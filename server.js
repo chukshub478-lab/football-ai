@@ -3359,44 +3359,35 @@ app.get(
             ------------------------------------------------
             */
 
-            if (
-                !home.name &&
-                match.home_team_id
-            ) {
+            const homeId =
+    home?.id ||
+    match.home_team_id ||
+    match.home_team?.id ||
+    null;
 
-                home =
-                    await getTeam(
-                        match.home_team_id
-                    ) ||
-                    home;
-            }
+const awayId =
+    away?.id ||
+    match.away_team_id ||
+    match.away_team?.id ||
+    null;
 
+const leagueId =
+    league?.id ||
+    match.league_id ||
+    match.league?.id ||
+    null;
 
-            if (
-                !away.name &&
-                match.away_team_id
-            ) {
+if (!home.name || home.name === "Home Team") {
+    home = await getTeam(homeId) || home;
+}
 
-                away =
-                    await getTeam(
-                        match.away_team_id
-                    ) ||
-                    away;
-            }
+if (!away.name || away.name === "Away Team") {
+    away = await getTeam(awayId) || away;
+}
 
-
-            if (
-                !league.name &&
-                match.league_id
-            ) {
-
-                league =
-                    await getLeague(
-                        match.league_id
-                    ) ||
-                    league;
-            }
-
+if (!league.name || league.name === "Unknown League") {
+    league = await getLeague(leagueId) || league;
+    }
 
             /*
             ------------------------------------------------
