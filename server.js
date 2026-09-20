@@ -3804,7 +3804,505 @@ app.get(
 41. SERVER START
 ===========================================================
 */
+// ===============================
+// DAILY PICKS
+// ===============================
 
+app.get("/api/daily-picks", async (req, res) => {
+    try {
+        // Nigeria date
+        const today = new Intl.DateTimeFormat("en-CA", {
+            timeZone: "Africa/Lagos",
+            year: "numeric",
+            month: "2-digit",
+            day: "2-digit"
+        }).format(new Date());
+
+        const KEY = process.env.BZZOIRO_API_KEY;
+
+        if (!KEY) {
+            return res.status(500).json({
+                success: false,
+                message: "BZZOIRO_API_KEY is missing."
+            });
+        }
+
+        const headers = {
+            Authorization: `Token ${KEY}`,
+            Accept: "application/json"
+        };
+
+        // Get today's fixtures
+        const fixturesResponse = await fetch(
+            `https://sports.bzzoiro.com/api/v2/events/?date_from=${today}&date_to=${today}&limit=200`,
+            { headers }
+        );
+
+        if (!fixturesResponse.ok) {
+            throw new Error(
+                `Bzzoiro fixtures error: HTTP ${fixturesResponse.status}`
+            );
+        }
+
+        const fixturesData = await fixturesResponse.json();
+
+        const events = Array.isArray(fixturesData?.results)
+            ? fixturesData.results
+            : [];
+
+        // Only upcoming matches
+        const upcoming = events.filter(event => {
+            const status = String(event.status || "").toLowerCase();
+
+            return (
+                event.id &&
+                ![
+                    "finished",
+                    "cancelled",
+                    "postponed",
+                    "live",
+                    "in_play"
+                ].includes(status)
+            );
+        });
+
+        if (!upcoming.length) {
+            return res.json({
+                success: true,
+                provider: "Bzzoiro Sports Data",
+                date: today,
+                timezone: "Africa/Lagos",
+                slips: {
+                    safe: null,
+                    balanced: null
+                },
+                message: "No upcoming fixtures found for today."
+            });
+        }
+
+        // Convert probability values into decimals
+        function probability(value) {
+            if (value === null || value === undefined) return null;
+
+            if (typeof value === "string") {
+                value = value.replace("%", "").trim();
+            }
+
+            const n = Number(value);
+
+            if (!Number.isFinite(n)) return null;
+
+            if (n > 1 && n <= 100) return n / 100;
+
+            if (n >= 0 && n <= 1) return n;
+
+            return null;
+        }
+
+        // Process matches
+        const candidates = [];
+
+        // Limit to avoid excessive API requests
+        const matchesToAnalyze = upcoming.slice(0, 40);
+
+        for (let i = 0; i < matchesToAnalyze.length; i += 6) {
+            const batch = matchesToAnalyze.slice(i, i + 6);
+
+            const results = await Promise.all(
+                batch.map(async event => {
+                    try {
+                        const predictionResponse = await fetch(
+                            `https://sports.bzzoiro.com/api/v2/events/${event.id}/prediction/`,
+                            { headers }
+                        );
+
+                        if (!predictionResponse.ok) {
+                            return null;
+                        }
+
+                        const prediction = await predictionResponse.json();
+
+                        // Bzzoiro can return the model at different nesting levels
+                        const model =
+                            prediction?.model ||
+                            prediction?.prediction?.model ||
+                            prediction?.data?.model ||
+                            prediction?.prediction?.data?.model ||
+                            {};
+
+                        const probabilities =
+                            model.resultProbabilitiesDecimal ||
+                            {};
+
+                        const odds = model.odds || {};
+
+                        const home =
+                            event.home_team?.name ||
+                            event.home?.name ||
+                            event.homeTeam?.name ||
+                            event.home ||
+                            "Home Team";
+
+                        const away =
+                            event.away_team?.name ||
+                            event.away?.name ||
+                            event.awayTeam?.name ||
+                            event.away ||
+                            "Away Team";
+
+                        const league =
+                            event.league?.name ||
+                            event.competition?.name ||
+                            event.tournament?.name ||
+                            "Football";
+
+                        const choices = [];
+
+                        // Home Win
+                        const homeProbability =
+                            probability(probabilities.homeWin);
+
+                        const homeOdds = Number(odds.homeWin);
+
+                        if (
+                            homeProbability !== null &&
+                            Number.isFinite(homeOdds) &&
+                            homeOdds > 1
+                        ) {
+                            choices.push({
+                                market: "Home Win",
+                                probability: homeProbability,
+                                odds: homeOdds
+                            });
+                        }
+
+                        // Draw
+                        const drawProbability =
+                            probability(probabilities.draw);
+
+                        const drawOdds = Number(odds.draw);
+
+                        if (
+                            drawProbability !== null &&
+                            Number.isFinite(drawOdds) &&
+                            drawOdds > 1
+                        ) {
+                            choices.push({
+                                market: "Draw",
+                                probability: drawProbability,
+                                odds: drawOdds
+                            });
+                        }
+
+                        // Away Win
+                        const awayProbability =
+                            probability(probabilities.awayWin);
+
+                        const awayOdds = Number(odds.awayWin);
+
+                        if (
+                            awayProbability !== null &&
+                            Number.isFinite(awayOdds) &&
+                            awayOdds > 1
+                        ) {
+                            choices.push({
+                                market: "Away Win",
+                                probability: awayProbability,
+                                odds: awayOdds
+                            });
+                        }
+
+                        // BTTS
+                        const btts = model.bothTeamsToScore || {};
+
+                        const bttsYesProbability =
+                            probability(btts.yes);
+
+                        const bttsYesOdds =
+                            Number(odds.bttsYes);
+
+                        if (
+                            bttsYesProbability !== null &&
+                            Number.isFinite(bttsYesOdds) &&
+                            bttsYesOdds > 1
+                        ) {
+                            choices.push({
+                                market: "BTTS Yes",
+                                probability: bttsYesProbability,
+                                odds: bttsYesOdds
+                            });
+                        }
+
+                        const bttsNoProbability =
+                            probability(btts.no);
+
+                        const bttsNoOdds =
+                            Number(odds.bttsNo);
+
+                        if (
+                            bttsNoProbability !== null &&
+                            Number.isFinite(bttsNoOdds) &&
+                            bttsNoOdds > 1
+                        ) {
+                            choices.push({
+                                market: "BTTS No",
+                                probability: bttsNoProbability,
+                                odds: bttsNoOdds
+                            });
+                        }
+
+                        // Over/Under 2.5
+                        const goalsMarkets =
+                            model.goalsMarkets || {};
+
+                        const over25Probability =
+                            probability(goalsMarkets.over25);
+
+                        const over25Odds =
+                            Number(odds.over25);
+
+                        if (
+                            over25Probability !== null &&
+                            Number.isFinite(over25Odds) &&
+                            over25Odds > 1
+                        ) {
+                            choices.push({
+                                market: "Over 2.5 Goals",
+                                probability: over25Probability,
+                                odds: over25Odds
+                            });
+                        }
+
+                        const under25Probability =
+                            probability(goalsMarkets.under25);
+
+                        const under25Odds =
+                            Number(odds.under25);
+
+                        if (
+                            under25Probability !== null &&
+                            Number.isFinite(under25Odds) &&
+                            under25Odds > 1
+                        ) {
+                            choices.push({
+                                market: "Under 2.5 Goals",
+                                probability: under25Probability,
+                                odds: under25Odds
+                            });
+                        }
+
+                        if (!choices.length) {
+                            return null;
+                        }
+
+                        // Select the highest probability market
+                        choices.sort(
+                            (a, b) =>
+                                b.probability - a.probability
+                        );
+
+                        const best = choices[0];
+
+                        return {
+                            eventId: event.id,
+                            home,
+                            away,
+                            league,
+                            market: best.market,
+                            odds: Number(best.odds.toFixed(2)),
+                            probability: best.probability
+                        };
+
+                    } catch (error) {
+                        console.error(
+                            "Prediction error:",
+                            event.id,
+                            error.message
+                        );
+
+                        return null;
+                    }
+                })
+            );
+
+            for (const result of results) {
+                if (result) {
+                    candidates.push(result);
+                }
+            }
+        }
+
+        // Remove duplicates
+        const uniqueCandidates = [];
+
+        const seenEvents = new Set();
+
+        for (const candidate of candidates) {
+            if (seenEvents.has(candidate.eventId)) continue;
+
+            seenEvents.add(candidate.eventId);
+            uniqueCandidates.push(candidate);
+        }
+
+        // Highest probability first
+        uniqueCandidates.sort(
+            (a, b) => b.probability - a.probability
+        );
+
+        // Build a slip inside an odds range
+        function buildSlip(minOdds, maxOdds, minimumProbability) {
+
+            const available = uniqueCandidates.filter(
+                pick => pick.probability >= minimumProbability
+            );
+
+            let bestCombination = null;
+            let bestScore = -Infinity;
+
+            function search(
+                start,
+                selections,
+                usedLeagues,
+                totalOdds,
+                score
+            ) {
+                // Check current combination
+                if (
+                    selections.length >= 2 &&
+                    totalOdds >= minOdds &&
+                    totalOdds <= maxOdds
+                ) {
+                    if (score > bestScore) {
+                        bestScore = score;
+                        bestCombination = {
+                            selections: [...selections],
+                            totalOdds
+                        };
+                    }
+                }
+
+                // Maximum 6 selections
+                if (selections.length >= 6) return;
+
+                for (
+                    let i = start;
+                    i < available.length;
+                    i++
+                ) {
+                    const pick = available[i];
+
+                    if (usedLeagues.has(pick.league)) {
+                        continue;
+                    }
+
+                    const nextOdds =
+                        totalOdds * pick.odds;
+
+                    if (nextOdds > maxOdds) {
+                        continue;
+                    }
+
+                    const nextLeagues =
+                        new Set(usedLeagues);
+
+                    nextLeagues.add(pick.league);
+
+                    const nextSelections =
+                        [...selections, pick];
+
+                    // Combination probability score
+                    const nextScore =
+                        score * pick.probability;
+
+                    search(
+                        i + 1,
+                        nextSelections,
+                        nextLeagues,
+                        nextOdds,
+                        nextScore
+                    );
+                }
+            }
+
+            search(
+                0,
+                [],
+                new Set(),
+                1,
+                1
+            );
+
+            if (!bestCombination) {
+                return null;
+            }
+
+            return {
+                selections: bestCombination.selections.map(
+                    pick => ({
+                        eventId: pick.eventId,
+                        home: pick.home,
+                        away: pick.away,
+                        league: pick.league,
+                        market: pick.market,
+                        odds: pick.odds,
+                        probability:
+                            `${(pick.probability * 100).toFixed(1)}%`
+                    })
+                ),
+                selectionCount:
+                    bestCombination.selections.length,
+                totalOdds:
+                    Number(
+                        bestCombination.totalOdds.toFixed(2)
+                    ),
+                bookingCode: null,
+                bookingStatus:
+                    "Pending. Generate the final booking code from the SportyBet bet slip.",
+                oddsSource:
+                    "Bzzoiro Sports Data"
+            };
+        }
+
+        const safeSlip =
+            buildSlip(5, 7, 0.60);
+
+        const balancedSlip =
+            buildSlip(7, 10, 0.50);
+
+        return res.json({
+            success: true,
+            provider: "Bzzoiro Sports Data",
+            date: today,
+            timezone: "Africa/Lagos",
+
+            analyzedFixtures:
+                matchesToAnalyze.length,
+
+            availableCandidates:
+                uniqueCandidates.length,
+
+            slips: {
+                safe: safeSlip,
+                balanced: balancedSlip
+            },
+
+            disclaimer:
+                "These are model-based selections, not guaranteed outcomes."
+        });
+
+    } catch (error) {
+
+        console.error(
+            "Daily Picks Error:",
+            error
+        );
+
+        return res.status(500).json({
+            success: false,
+            message: error.message
+        });
+    }
+});
 app.listen(
     PORT,
     "0.0.0.0",
