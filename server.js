@@ -1492,30 +1492,16 @@ function estimateExpectedGoals(
     odds
 ) {
 
-    let homeXG =
-        findNumber(
-            stats,
-            [
-                "home_xg",
-                "home_expected_goals",
-                "expected_goals_home",
-                "xg_home",
-                "home_xg_value"
-            ]
-        );
+let homeXG =
+    toNumber(
+        stats?.stats?.home?.expected_goals
+    );
 
 
-    let awayXG =
-        findNumber(
-            stats,
-            [
-                "away_xg",
-                "away_expected_goals",
-                "expected_goals_away",
-                "xg_away",
-                "away_xg_value"
-            ]
-        );
+let awayXG =
+    toNumber(
+        stats?.stats?.away?.expected_goals
+    );
 
 
     /*
