@@ -3463,14 +3463,16 @@ app.get(
             */
 
             const [
-                stats,
-                h2h,
-                oddsData,
-                prediction,
-                lineups,
-                incidents
-            ] =
-                await Promise.all([
+    stats,
+    h2h,
+    oddsData,
+    prediction,
+    lineups,
+    incidents,
+    homeForm,
+    awayForm
+] =
+    await Promise.all([
 
                     getStats(
                         eventId
