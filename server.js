@@ -1636,7 +1636,309 @@ let awayXG =
             )
     };
 }
+/*
+===========================================================
+24B. RECENT TEAM FORM
+===========================================================
+*/
 
+async function getRecentTeamForm(
+    teamId,
+    limit = 5
+) {
+
+    if (!teamId) {
+
+        return {
+            teamId: null,
+            matches: [],
+            form: "",
+            wins: 0,
+            draws: 0,
+            losses: 0,
+            goalsFor: 0,
+            goalsAgainst: 0
+        };
+    }
+
+
+    try {
+
+        const data =
+            await bzzoiroRequest(
+                `/teams/${teamId}/fixtures/?limit=50`
+            );
+
+
+        const fixtures =
+            Array.isArray(
+                data?.results
+            )
+                ? data.results
+                : [];
+
+
+        const finished =
+            fixtures
+                .filter(
+                    fixture =>
+                        String(
+                            fixture.status ||
+                            ""
+                        ).toLowerCase()
+                        === "finished"
+                )
+                .filter(
+                    fixture => {
+
+                        const homeScore =
+                            toNumber(
+                                fixture.home_score ??
+                                fixture.home_goals ??
+                                fixture.score?.home
+                            );
+
+                        const awayScore =
+                            toNumber(
+                                fixture.away_score ??
+                                fixture.away_goals ??
+                                fixture.score?.away
+                            );
+
+                        return (
+                            homeScore !== null &&
+                            awayScore !== null
+                        );
+                    }
+                )
+                .sort(
+                    (
+                        a,
+                        b
+                    ) =>
+                        new Date(
+                            b.event_date ||
+                            b.start_time ||
+                            b.date ||
+                            0
+                        ) -
+                        new Date(
+                            a.event_date ||
+                            a.start_time ||
+                            a.date ||
+                            0
+                        )
+                )
+                .slice(
+                    0,
+                    limit
+                );
+
+
+        let wins = 0;
+        let draws = 0;
+        let losses = 0;
+        let goalsFor = 0;
+        let goalsAgainst = 0;
+
+
+        const matches =
+            finished.map(
+                fixture => {
+
+                    const homeId =
+                        fixture.home_team?.id ??
+                        fixture.home_team_id ??
+                        null;
+
+
+                    const awayId =
+                        fixture.away_team?.id ??
+                        fixture.away_team_id ??
+                        null;
+
+
+                    const homeScore =
+                        toNumber(
+                            fixture.home_score ??
+                            fixture.home_goals ??
+                            fixture.score?.home
+                        );
+
+
+                    const awayScore =
+                        toNumber(
+                            fixture.away_score ??
+                            fixture.away_goals ??
+                            fixture.score?.away
+                        );
+
+
+                    const isHome =
+                        String(homeId) ===
+                        String(teamId);
+
+
+                    const goalsScored =
+                        isHome
+                            ? homeScore
+                            : awayScore;
+
+
+                    const goalsConceded =
+                        isHome
+                            ? awayScore
+                            : homeScore;
+
+
+                    let result;
+
+
+                    if (
+                        goalsScored >
+                        goalsConceded
+                    ) {
+
+                        result = "W";
+                        wins++;
+
+                    } else if (
+                        goalsScored ===
+                        goalsConceded
+                    ) {
+
+                        result = "D";
+                        draws++;
+
+                    } else {
+
+                        result = "L";
+                        losses++;
+                    }
+
+
+                    goalsFor +=
+                        goalsScored;
+
+                    goalsAgainst +=
+                        goalsConceded;
+
+
+                    const opponent =
+                        isHome
+                            ? fixture.away_team?.name
+                            : fixture.home_team?.name;
+
+
+                    return {
+
+                        eventId:
+                            fixture.id,
+
+                        date:
+                            fixture.event_date ||
+                            fixture.start_time ||
+                            fixture.date ||
+                            null,
+
+                        venue:
+                            isHome
+                                ? "Home"
+                                : "Away",
+
+                        opponent:
+                            opponent ||
+                            "Unknown",
+
+                        goalsFor:
+                            goalsScored,
+
+                        goalsAgainst:
+                            goalsConceded,
+
+                        result
+                    };
+                }
+            );
+
+
+        return {
+
+            teamId,
+
+            matches,
+
+            form:
+                matches
+                    .map(
+                        match =>
+                            match.result
+                    )
+                    .join(""),
+
+            wins,
+
+            draws,
+
+            losses,
+
+            goalsFor,
+
+            goalsAgainst,
+
+            averageGoalsFor:
+                matches.length
+                    ? round(
+                        goalsFor /
+                        matches.length,
+                        2
+                    )
+                    : 0,
+
+            averageGoalsAgainst:
+                matches.length
+                    ? round(
+                        goalsAgainst /
+                        matches.length,
+                        2
+                    )
+                    : 0
+        };
+
+
+    } catch (error) {
+
+        console.error(
+            "Recent form error:",
+            teamId,
+            error.message
+        );
+
+
+        return {
+
+            teamId,
+
+            matches: [],
+
+            form: "",
+
+            wins: 0,
+
+            draws: 0,
+
+            losses: 0,
+
+            goalsFor: 0,
+
+            goalsAgainst: 0,
+
+            averageGoalsFor: 0,
+
+            averageGoalsAgainst: 0
+        };
+    }
+}
 
 /*
 ===========================================================
