@@ -3497,6 +3497,16 @@ app.get(
                     getIncidents(
                         eventId
                     )
+        ,
+getRecentTeamForm(
+    match.home_team_id ||
+    match.home_team?.id
+),
+
+getRecentTeamForm(
+    match.away_team_id ||
+    match.away_team?.id
+)
                 ]);
 
 
