@@ -3720,24 +3720,32 @@ if (!league.name || league.name === "Unknown League") {
 
                 data: {
 
-                    stats:
-                        stats,
+    stats:
+        stats,
 
-                    h2h:
-                        h2h,
+    h2h:
+        h2h,
 
-                    odds:
-                        oddsData,
+    odds:
+        oddsData,
 
-                    prediction:
-                        prediction,
+    prediction:
+        prediction,
 
-                    lineups:
-                        lineups,
+    lineups:
+        lineups,
 
-                    incidents:
-                        incidents
-                },
+    incidents:
+        incidents,
+
+    recentForm: {
+        home:
+            homeForm,
+
+        away:
+            awayForm
+    }
+},
 
                 generatedAt:
                     new Date()
